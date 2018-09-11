@@ -291,19 +291,22 @@ lzc_promote(const char *fsname, char *snapnamebuf, int snapnamelen)
 	 * The promote ioctl is still legacy, so we need to construct our
 	 * own zfs_cmd_t rather than using lzc_ioctl().
 	 */
-	zfs_cmd_t zc = { "\0" };
+	nvlist_t *retnvl = NULL;
+	int error;
 
 	ASSERT3S(g_refcount, >, 0);
 	VERIFY3S(g_fd, !=, -1);
-
-	(void) strlcpy(zc.zc_name, fsname, sizeof (zc.zc_name));
-	if (ioctl(g_fd, ZFS_IOC_PROMOTE, &zc) != 0) {
-		int error = errno;
-		if (error == EEXIST && snapnamebuf != NULL)
-			(void) strlcpy(snapnamebuf, zc.zc_string, snapnamelen);
-		return (error);
+	error = lzc_ioctl(ZFS_IOC_PROMOTE, fsname, NULL, &retnvl);
+	if (!error) {
+		return (0);
 	}
-	return (0);
+	if (error == EEXIST && snapnamebuf != NULL) {
+		char *conflsnap;
+		conflsnap = fnvlist_lookup_string(retnvl, "conflsnap");
+		(void) strlcpy(snapnamebuf, conflsnap, snapnamelen);
+	}
+	fnvlist_free(retnvl);
+	return (error);
 }
 
 int

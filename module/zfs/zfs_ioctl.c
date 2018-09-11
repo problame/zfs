@@ -5302,6 +5302,7 @@ zfs_ioc_promote(zfs_cmd_t *zc)
 	dsl_pool_t *dp;
 	dsl_dataset_t *ds, *ods;
 	char origin[ZFS_MAX_DATASET_NAME_LEN];
+	char conflsnap[ZFS_MAX_DATASET_NAME_LEN];
 	char *cp;
 	int error;
 
@@ -5348,7 +5349,17 @@ zfs_ioc_promote(zfs_cmd_t *zc)
 		*cp = '\0';
 	(void) dmu_objset_find(origin,
 	    zfs_unmount_snap_cb, NULL, DS_FIND_SNAPSHOTS);
-	return (dsl_dataset_promote(zc->zc_name, zc->zc_string));
+
+
+	error = dsl_dataset_promote(zc->zc_name, conflsnap);
+	if (error) {
+		nvlist_t *retnvl;
+		retnvl = fnvlist_alloc();
+		nvlist_add_string(retnvl, "conflsnap", conflsnap);
+		put_nvlist(zc, retnvl);
+		fnvlist_free(retnvl);
+	}
+	return error;
 }
 
 /*
