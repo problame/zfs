@@ -3057,24 +3057,19 @@ zfs_ioc_set_fsacl(zfs_cmd_t *zc)
 	return (error);
 }
 
+static const zfs_ioc_key_t zfs_keys_get_fsacl_props[] = {};
 /*
  * inputs:
- * zc_name		name of filesystem
+ * name		name of filesystem
  *
  * outputs:
- * zc_nvlist_src{_size}	nvlist of delegated permissions
+ * outnvl	nvlist of delegated permissions
  */
 static int
-zfs_ioc_get_fsacl(zfs_cmd_t *zc)
+zfs_ioc_get_fsacl(const char *name, nvlist_t *innvl, nvlist_t *outnvl)
 {
-	nvlist_t *nvp;
 	int error;
-
-	if ((error = dsl_deleg_get(zc->zc_name, &nvp)) == 0) {
-		error = put_nvlist(zc, nvp);
-		nvlist_free(nvp);
-	}
-
+	error = dsl_deleg_get(name, &outnvl);
 	return (error);
 }
 
@@ -6663,6 +6658,10 @@ zfs_ioctl_init(void)
 		zfs_ioc_objset_recvd_props, zfs_secpolicy_read, DATASET_NAME,
 		POOL_CHECK_SUSPENDED, B_FALSE, B_FALSE, zfs_keys_recvd_props,
 		ARRAY_SIZE(zfs_keys_recvd_props));
+	zfs_ioctl_register("get_fsacl", ZFS_IOC_GET_FSACL, zfs_ioc_get_fsacl,
+	    zfs_secpolicy_read, DATASET_NAME, POOL_CHECK_SUSPENDED, B_FALSE,
+	    B_FALSE, zfs_keys_get_fsacl_props,
+	    ARRAY_SIZE(zfs_keys_get_fsacl_props));
 
 
 	/* IOCTLS that use the legacy function signature */
@@ -6740,8 +6739,6 @@ zfs_ioctl_init(void)
 
 	zfs_ioctl_register_dataset_read(ZFS_IOC_NEXT_OBJ,
 	    zfs_ioc_next_obj);
-	zfs_ioctl_register_dataset_read(ZFS_IOC_GET_FSACL,
-	    zfs_ioc_get_fsacl);
 	zfs_ioctl_register_dataset_read(ZFS_IOC_OBJSET_STATS,
 	    zfs_ioc_objset_stats);
 	zfs_ioctl_register_dataset_read(ZFS_IOC_OBJSET_ZPLPROPS,

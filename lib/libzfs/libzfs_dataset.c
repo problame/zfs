@@ -5156,37 +5156,22 @@ zfs_get_fsacl(zfs_handle_t *zhp, nvlist_t **nvl)
 {
 	zfs_cmd_t zc = {"\0"};
 	libzfs_handle_t *hdl = zhp->zfs_hdl;
-	int nvsz = 2048;
-	void *nvbuf;
 	int err = 0;
 	char errbuf[1024];
 
 	assert(zhp->zfs_type == ZFS_TYPE_VOLUME ||
 	    zhp->zfs_type == ZFS_TYPE_FILESYSTEM);
 
-tryagain:
+	err = zfs_ioctl_nvl(hdl, ZFS_IOC_GET_FSACL, zhp->zfs_name, NULL, nvl);
 
-	nvbuf = malloc(nvsz);
-	if (nvbuf == NULL) {
-		err = (zfs_error(hdl, EZFS_NOMEM, strerror(errno)));
-		goto out;
-	}
-
-	zc.zc_nvlist_dst_size = nvsz;
-	zc.zc_nvlist_dst = (uintptr_t)nvbuf;
-
-	(void) strlcpy(zc.zc_name, zhp->zfs_name, sizeof (zc.zc_name));
-
-	if (ioctl(hdl->libzfs_fd, ZFS_IOC_GET_FSACL, &zc) != 0) {
+	if (err != 0) {
 		(void) snprintf(errbuf, sizeof (errbuf),
 		    dgettext(TEXT_DOMAIN, "cannot get permissions on '%s'"),
 		    zc.zc_name);
-		switch (errno) {
+		switch (err) {
 		case ENOMEM:
-			free(nvbuf);
-			nvsz = zc.zc_nvlist_dst_size;
-			goto tryagain;
-
+			err = (zfs_error(hdl, EZFS_NOMEM, strerror(err)));
+			goto out;
 		case ENOTSUP:
 			zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
 			    "pool must be upgraded"));
@@ -5199,21 +5184,11 @@ tryagain:
 			err = zfs_error(hdl, EZFS_NOENT, errbuf);
 			break;
 		default:
-			err = zfs_standard_error_fmt(hdl, errno, errbuf);
+			err = zfs_standard_error_fmt(hdl, err, errbuf);
 			break;
-		}
-	} else {
-		/* success */
-		int rc = nvlist_unpack(nvbuf, zc.zc_nvlist_dst_size, nvl, 0);
-		if (rc) {
-			(void) snprintf(errbuf, sizeof (errbuf), dgettext(
-			    TEXT_DOMAIN, "cannot get permissions on '%s'"),
-			    zc.zc_name);
-			err = zfs_standard_error_fmt(hdl, rc, errbuf);
 		}
 	}
 
-	free(nvbuf);
 out:
 	return (err);
 }
