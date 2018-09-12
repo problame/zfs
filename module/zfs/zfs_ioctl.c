@@ -5958,43 +5958,60 @@ zfs_ioc_events_seek(zfs_cmd_t *zc)
 	return (error);
 }
 
-/*
- * inputs:
- * zc_name		name of new filesystem or snapshot
- * zc_value		full name of old snapshot
- *
+static const zfs_ioc_key_t zfs_keys_space_written[] = {
+	/* name of new filesystem or snapshot */
+	{"newds",	DATA_TYPE_STRING,	0},
+	/* full name of old snapshot */
+	{"oldsnap",	DATA_TYPE_STRING,	0},
+};
+ /*
  * outputs:
- * zc_cookie		space in bytes
- * zc_objset_type	compressed space in bytes
- * zc_perm_action	uncompressed space in bytes
+ * "used"	space in bytes
+ * "comp"	compressed space in bytes
+ * "uncomp"	uncompressed space in bytes
  */
 static int
-zfs_ioc_space_written(zfs_cmd_t *zc)
+zfs_ioc_space_written(const char *name, nvlist_t *innvl, nvlist_t *outnvl)
 {
 	int error;
 	dsl_pool_t *dp;
 	dsl_dataset_t *new, *old;
+	char *newds, *oldsnap;
 
-	error = dsl_pool_hold(zc->zc_name, FTAG, &dp);
+	newds = fnvlist_lookup_string(innvl, "newds");
+	oldsnap = fnvlist_lookup_string(innvl, "oldsnap");
+
+	if (strcmp(name, newds) != 0) {
+		error = SET_ERROR(EINVAL);
+		return (error);
+	}
+
+	error = dsl_pool_hold(newds, FTAG, &dp);
 	if (error != 0)
 		return (error);
-	error = dsl_dataset_hold(dp, zc->zc_name, FTAG, &new);
+	error = dsl_dataset_hold(dp, newds, FTAG, &new);
 	if (error != 0) {
 		dsl_pool_rele(dp, FTAG);
 		return (error);
 	}
-	error = dsl_dataset_hold(dp, zc->zc_value, FTAG, &old);
+	error = dsl_dataset_hold(dp, oldsnap, FTAG, &old);
 	if (error != 0) {
 		dsl_dataset_rele(new, FTAG);
 		dsl_pool_rele(dp, FTAG);
 		return (error);
 	}
 
-	error = dsl_dataset_space_written(old, new, &zc->zc_cookie,
-	    &zc->zc_objset_type, &zc->zc_perm_action);
+	uint64_t used, comp, uncomp;
+
+	error = dsl_dataset_space_written(old, new, &used, &comp, &uncomp);
 	dsl_dataset_rele(old, FTAG);
 	dsl_dataset_rele(new, FTAG);
 	dsl_pool_rele(dp, FTAG);
+
+	fnvlist_add_uint64(outnvl, "used", used);
+	fnvlist_add_uint64(outnvl, "comp", comp);
+	fnvlist_add_uint64(outnvl, "uncomp", uncomp);
+
 	return (error);
 }
 
@@ -6645,6 +6662,11 @@ zfs_ioctl_init(void)
 	    zfs_keys_pool_discard_checkpoint,
 	    ARRAY_SIZE(zfs_keys_pool_discard_checkpoint));
 
+	zfs_ioctl_register("space_written",  ZFS_IOC_SPACE_WRITTEN,
+	    zfs_ioc_space_written, zfs_secpolicy_read, DATASET_NAME,
+	    POOL_CHECK_SUSPENDED, B_FALSE, B_FALSE, zfs_keys_space_written,
+	    ARRAY_SIZE(zfs_keys_space_written));
+
 	/* IOCTLS that use the legacy function signature */
 
 	zfs_ioctl_register_legacy(ZFS_IOC_POOL_FREEZE, zfs_ioc_pool_freeze,
@@ -6718,8 +6740,6 @@ zfs_ioctl_init(void)
 	zfs_ioctl_register_pool(ZFS_IOC_CLEAR, zfs_ioc_clear,
 	    zfs_secpolicy_config, B_TRUE, POOL_CHECK_READONLY);
 
-	zfs_ioctl_register_dataset_read(ZFS_IOC_SPACE_WRITTEN,
-	    zfs_ioc_space_written);
 	zfs_ioctl_register_dataset_read(ZFS_IOC_OBJSET_RECVD_PROPS,
 	    zfs_ioc_objset_recvd_props);
 	zfs_ioctl_register_dataset_read(ZFS_IOC_NEXT_OBJ,

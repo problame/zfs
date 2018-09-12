@@ -3296,32 +3296,39 @@ zfs_prop_get_written_int(zfs_handle_t *zhp, const char *propname,
     uint64_t *propvalue)
 {
 	int err;
-	zfs_cmd_t zc = {"\0"};
+	char oldsnap[MAXPATHLEN * 2];
 	const char *snapname;
+	nvlist_t *innvl, *retnvl;
 
-	(void) strlcpy(zc.zc_name, zhp->zfs_name, sizeof (zc.zc_name));
-
-	snapname = strchr(propname, '@') + 1;
+	snapname = strchr(propname, '@') + 1; // split: written@$snapname
 	if (strchr(snapname, '@')) {
-		(void) strlcpy(zc.zc_value, snapname, sizeof (zc.zc_value));
+		(void) strlcpy(oldsnap, snapname, sizeof (oldsnap));
 	} else {
 		/* snapname is the short name, append it to zhp's fsname */
 		char *cp;
 
-		(void) strlcpy(zc.zc_value, zhp->zfs_name,
-		    sizeof (zc.zc_value));
-		cp = strchr(zc.zc_value, '@');
+		(void) strlcpy(oldsnap, zhp->zfs_name,
+		    sizeof (oldsnap));
+		cp = strchr(oldsnap, '@');
 		if (cp != NULL)
 			*cp = '\0';
-		(void) strlcat(zc.zc_value, "@", sizeof (zc.zc_value));
-		(void) strlcat(zc.zc_value, snapname, sizeof (zc.zc_value));
+		(void) strlcat(oldsnap, "@", sizeof (oldsnap));
+		(void) strlcat(oldsnap, snapname, sizeof (oldsnap));
 	}
+	// invariant: oldsnap is a snapshot's full name (including fs)
 
-	err = ioctl(zhp->zfs_hdl->libzfs_fd, ZFS_IOC_SPACE_WRITTEN, &zc);
+	innvl = fnvlist_alloc();
+	fnvlist_add_string(innvl, "newds", zhp->zfs_name);
+	fnvlist_add_string(innvl, "oldsnap", oldsnap);
+	err = zfs_ioctl_nvl(zhp->zfs_hdl, ZFS_IOC_SPACE_WRITTEN,
+		            zhp->zfs_name, innvl, &retnvl);
+	fnvlist_free(innvl);
+
 	if (err)
-		return (err);
+		return err;
 
-	*propvalue = zc.zc_cookie;
+	*propvalue = fnvlist_lookup_uint64(retnvl, "used");
+	fnvlist_free(retnvl);
 	return (0);
 }
 

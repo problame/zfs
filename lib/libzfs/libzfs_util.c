@@ -1538,6 +1538,69 @@ zfs_ioctl(libzfs_handle_t *hdl, int request, zfs_cmd_t *zc)
 	return (ioctl(hdl->libzfs_fd, request, zc));
 }
 
+
+int
+zfs_ioctl_nvl(libzfs_handle_t *hdl, int request, const char *name,
+	  nvlist_t *source, nvlist_t **resultp)
+{
+	zfs_cmd_t zc = {0};
+	int error = 0;
+	char *packed = NULL;
+	size_t size = 0;
+
+	ASSERT3U(request, !=, ZFS_IOC_CHANNEL_PROGRAM);
+
+	if (name != NULL)
+		(void) strlcpy(zc.zc_name, name, sizeof (zc.zc_name));
+
+	if (source != NULL) {
+		packed = fnvlist_pack(source, &size);
+		zc.zc_nvlist_src = (uint64_t)(uintptr_t)packed;
+		zc.zc_nvlist_src_size = size;
+	}
+
+	if (resultp != NULL) {
+		*resultp = NULL;
+		zc.zc_nvlist_dst_size = MAX(size * 2, 128 * 1024);
+		zc.zc_nvlist_dst = (uint64_t)(uintptr_t)
+			malloc(zc.zc_nvlist_dst_size);
+		if (zc.zc_nvlist_dst == (uint64_t)0) {
+			error = ENOMEM;
+			goto out;
+		}
+	}
+
+	while (ioctl(hdl->libzfs_fd, request, &zc) != 0) {
+		/*
+		 * If ioctl exited with ENOMEM, we retry the ioctl after
+		 * increasing the size of the destination nvlist.
+		 */
+		if (errno == ENOMEM && resultp != NULL) {
+			free((void *)(uintptr_t)zc.zc_nvlist_dst);
+			zc.zc_nvlist_dst_size *= 2;
+			zc.zc_nvlist_dst = (uint64_t)(uintptr_t)
+			malloc(zc.zc_nvlist_dst_size);
+			if (zc.zc_nvlist_dst == (uint64_t)0) {
+				error = ENOMEM;
+				goto out;
+			}
+		} else {
+			error = errno;
+			break;
+		}
+	}
+	if (zc.zc_nvlist_dst_filled) {
+		*resultp = fnvlist_unpack((void *)(uintptr_t)zc.zc_nvlist_dst,
+					  zc.zc_nvlist_dst_size);
+	}
+
+	out:
+	if (packed != NULL)
+		fnvlist_pack_free(packed, size);
+	free((void *)(uintptr_t)zc.zc_nvlist_dst);
+	return (error);
+}
+
 /*
  * ================================================================
  * API shared by zfs and zpool property management
