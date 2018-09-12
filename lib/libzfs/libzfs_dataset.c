@@ -339,28 +339,11 @@ get_recvd_props_ioctl(zfs_handle_t *zhp)
 {
 	libzfs_handle_t *hdl = zhp->zfs_hdl;
 	nvlist_t *recvdprops;
-	zfs_cmd_t zc = {"\0"};
 	int err;
 
-	if (zcmd_alloc_dst_nvlist(hdl, &zc, 0) != 0)
-		return (-1);
-
-	(void) strlcpy(zc.zc_name, zhp->zfs_name, sizeof (zc.zc_name));
-
-	while (ioctl(hdl->libzfs_fd, ZFS_IOC_OBJSET_RECVD_PROPS, &zc) != 0) {
-		if (errno == ENOMEM) {
-			if (zcmd_expand_dst_nvlist(hdl, &zc) != 0) {
-				return (-1);
-			}
-		} else {
-			zcmd_free_nvlists(&zc);
-			return (-1);
-		}
-	}
-
-	err = zcmd_read_dst_nvlist(zhp->zfs_hdl, &zc, &recvdprops);
-	zcmd_free_nvlists(&zc);
-	if (err != 0)
+	err = zfs_ioctl_nvl(hdl, ZFS_IOC_OBJSET_RECVD_PROPS, zhp->zfs_name,
+	    NULL, &recvdprops);
+	if (err)
 		return (-1);
 
 	nvlist_free(zhp->zfs_recvd_props);

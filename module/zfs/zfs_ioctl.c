@@ -2203,38 +2203,31 @@ zfs_ioc_objset_stats(zfs_cmd_t *zc)
 	return (error);
 }
 
+
+static const zfs_ioc_key_t zfs_keys_recvd_props[] = {};
 /*
- * inputs:
- * zc_name		name of filesystem
- * zc_nvlist_dst_size	size of buffer for property nvlist
- *
  * outputs:
- * zc_nvlist_dst	received property nvlist
- * zc_nvlist_dst_size	size of received property nvlist
+ *   outnvl		received property nvlit
  *
  * Gets received properties (distinct from local properties on or after
  * SPA_VERSION_RECVD_PROPS) for callers who want to differentiate received from
  * local property values.
  */
 static int
-zfs_ioc_objset_recvd_props(zfs_cmd_t *zc)
+zfs_ioc_objset_recvd_props(const char *name, nvlist_t *innvl, nvlist_t *outnvl)
 {
 	int error = 0;
-	nvlist_t *nv;
 
 	/*
 	 * Without this check, we would return local property values if the
 	 * caller has not already received properties on or after
 	 * SPA_VERSION_RECVD_PROPS.
 	 */
-	if (!dsl_prop_get_hasrecvd(zc->zc_name))
+	if (!dsl_prop_get_hasrecvd(name))
 		return (SET_ERROR(ENOTSUP));
 
-	if (zc->zc_nvlist_dst != 0 &&
-	    (error = dsl_prop_get_received(zc->zc_name, &nv)) == 0) {
-		error = put_nvlist(zc, nv);
-		nvlist_free(nv);
-	}
+	if (outnvl)
+		error = dsl_prop_get_received(name, &outnvl);
 
 	return (error);
 }
@@ -6666,6 +6659,11 @@ zfs_ioctl_init(void)
 	    zfs_ioc_space_written, zfs_secpolicy_read, DATASET_NAME,
 	    POOL_CHECK_SUSPENDED, B_FALSE, B_FALSE, zfs_keys_space_written,
 	    ARRAY_SIZE(zfs_keys_space_written));
+	zfs_ioctl_register("received_properties", ZFS_IOC_OBJSET_RECVD_PROPS,
+		zfs_ioc_objset_recvd_props, zfs_secpolicy_read, DATASET_NAME,
+		POOL_CHECK_SUSPENDED, B_FALSE, B_FALSE, zfs_keys_recvd_props,
+		ARRAY_SIZE(zfs_keys_recvd_props));
+
 
 	/* IOCTLS that use the legacy function signature */
 
@@ -6740,8 +6738,6 @@ zfs_ioctl_init(void)
 	zfs_ioctl_register_pool(ZFS_IOC_CLEAR, zfs_ioc_clear,
 	    zfs_secpolicy_config, B_TRUE, POOL_CHECK_READONLY);
 
-	zfs_ioctl_register_dataset_read(ZFS_IOC_OBJSET_RECVD_PROPS,
-	    zfs_ioc_objset_recvd_props);
 	zfs_ioctl_register_dataset_read(ZFS_IOC_NEXT_OBJ,
 	    zfs_ioc_next_obj);
 	zfs_ioctl_register_dataset_read(ZFS_IOC_GET_FSACL,
