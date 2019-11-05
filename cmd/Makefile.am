@@ -6,3 +6,5 @@ SUBDIRS += arcstat arc_summary dbufstat
 endif
 
 SUBDIRS += mount_zfs zed zvol_id zvol_wait
+
+SUBDIRS += faketoken
