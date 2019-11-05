@@ -4331,6 +4331,22 @@ zfs_do_send(int argc, char **argv)
 		return (1);
 	}
 
+	static char *stdout_file = NULL;
+	if (!stdout_file && (stdout_file = getenv("ZFS_SEND_STDOUT_FILE"))) {
+		fprintf(stderr, "duping %s to stdout\n", stdout_file);
+		int fd = TEMP_FAILURE_RETRY(open(stdout_file, O_WRONLY|O_CREAT|O_TRUNC, 0600));
+		if (fd < 0) {
+			fprintf(stderr, "%s cannot be opened for STDOUT redirection\n", stdout_file);
+			return 1;
+		}
+		if (dup2(fd, STDOUT_FILENO) == -1) {
+			fprintf(stderr, "error duping %s to stdout\n", stdout_file);
+			return 1;
+		}
+		// TEMP_FAILURE_RETRY(close(fd));
+		// STDOUT_FILENO now contains open file handle to 
+	}
+
 	if (!flags.dryrun && isatty(STDOUT_FILENO)) {
 		(void) fprintf(stderr,
 		    gettext("Error: Stream can not be written to a terminal.\n"
