@@ -2057,10 +2057,7 @@ zfs_send_resume(libzfs_handle_t *hdl, zfs_handle_t *zhp, sendflags_t *flags, int
 				"unable to access '%s'"), name);
 			return (zfs_error(hdl, EZFS_BADPATH, errbuf));
 		}
-	} else {
-		// TODO abort if token requests send from another dataset than hdl
 	}
-	// TODO ASSERT zhp's tpe is always snapshot (?)
 
 	// ???
 	if (nvlist_lookup_uint64_array(resume_nvl, "book_redact_snaps",
@@ -2100,6 +2097,7 @@ zfs_send_resume(libzfs_handle_t *hdl, zfs_handle_t *zhp, sendflags_t *flags, int
 		}
 	}
 
+
 	if (flags->verbosity != 0) {
 		/*
 		 * Some of these may have come from the resume token, set them
@@ -2114,6 +2112,16 @@ zfs_send_resume(libzfs_handle_t *hdl, zfs_handle_t *zhp, sendflags_t *flags, int
 			tmpflags.embed_data = B_TRUE;
 		error = estimate_size(zhp, fromname, outfd, &tmpflags,
 		    resumeobj, resumeoff, bytes, redact_book, errbuf);
+	}
+
+	// we are about to issue the send ioctl
+	// => validate that the send spec we parsed from the token matches the send spec
+	// that the user specified on the command line
+	if (strcmp(zhp->zfs_name,  toname) != 0) {
+		zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
+			    "resumetoken->toname != argv toname: %s != %s"),
+			    toname, zhp->zfs_name);
+		return (zfs_error(hdl, EZFS_BADPATH, errbuf));
 	}
 
 	if (!flags->dryrun) {
