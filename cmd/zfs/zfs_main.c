@@ -4309,7 +4309,7 @@ zfs_do_send(int argc, char **argv)
 			    gettext("invalid flags combined with -t\n"));
 			usage(B_FALSE);
 		}
-		if (argc > 0) {
+		if (argc > 1) {
 			(void) fprintf(stderr, gettext("too many arguments\n"));
 			usage(B_FALSE);
 		}
@@ -4355,7 +4355,15 @@ zfs_do_send(int argc, char **argv)
 	}
 
 	if (resume_token != NULL) {
-		return (zfs_send_resume(g_zfs, &flags, STDOUT_FILENO,
+		zhp = NULL;
+		if (argc == 1) {
+			zhp = zfs_open(g_zfs, argv[0], ZFS_TYPE_DATASET);
+			if (zhp == NULL) {
+				// TODO error
+				return (1);
+			}
+		}
+		return (zfs_send_resume(g_zfs, zhp, &flags, STDOUT_FILENO,
 		    resume_token));
 	}
 

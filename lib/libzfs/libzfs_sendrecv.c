@@ -1982,14 +1982,13 @@ find_redact_book(libzfs_handle_t *hdl, const char *path,
 }
 
 int
-zfs_send_resume(libzfs_handle_t *hdl, sendflags_t *flags, int outfd,
+zfs_send_resume(libzfs_handle_t *hdl, zfs_handle_t *zhp, sendflags_t *flags, int outfd,
     const char *resume_token)
 {
 	char errbuf[1024];
 	char *toname;
 	char *fromname = NULL;
 	uint64_t resumeobj, resumeoff, toguid, fromguid, bytes;
-	zfs_handle_t *zhp;
 	int error = 0;
 	char name[ZFS_MAX_DATASET_NAME_LEN];
 	enum lzc_send_flags lzc_flags = 0;
@@ -2037,6 +2036,7 @@ zfs_send_resume(libzfs_handle_t *hdl, sendflags_t *flags, int outfd,
 	if (flags->raw || nvlist_exists(resume_nvl, "rawok"))
 		lzc_flags |= LZC_SEND_FLAG_RAW;
 
+	// open zhp based on toname / toguid (does some searching and sanity-checking that toname has toguid)
 	if (guid_to_name(hdl, toname, toguid, B_FALSE, name) != 0) {
 		if (zfs_dataset_exists(hdl, toname, ZFS_TYPE_DATASET)) {
 			zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
@@ -2049,18 +2049,26 @@ zfs_send_resume(libzfs_handle_t *hdl, sendflags_t *flags, int outfd,
 		}
 		return (zfs_error(hdl, EZFS_BADPATH, errbuf));
 	}
-	zhp = zfs_open(hdl, name, ZFS_TYPE_DATASET);
-	if (zhp == NULL) {
-		zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
-		    "unable to access '%s'"), name);
-		return (zfs_error(hdl, EZFS_BADPATH, errbuf));
+	if (!zhp) {
+		// trust whatever the resume token wants
+		zhp = zfs_open(hdl, name, ZFS_TYPE_DATASET);
+		if (zhp == NULL) {
+			zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
+				"unable to access '%s'"), name);
+			return (zfs_error(hdl, EZFS_BADPATH, errbuf));
+		}
+	} else {
+		// TODO abort if token requests send from another dataset than hdl
 	}
+	// TODO ASSERT zhp's tpe is always snapshot (?)
 
+	// ???
 	if (nvlist_lookup_uint64_array(resume_nvl, "book_redact_snaps",
 	    &redact_snap_guids, (uint_t *)&num_redact_snaps) != 0) {
 		num_redact_snaps = -1;
 	}
 
+	// set fromname based on fromguid 
 	if (fromguid != 0) {
 		if (guid_to_name_redact_snaps(hdl, toname, fromguid, B_TRUE,
 		    redact_snap_guids, num_redact_snaps, name) != 0) {
@@ -2074,6 +2082,7 @@ zfs_send_resume(libzfs_handle_t *hdl, sendflags_t *flags, int outfd,
 
 	redact_snap_guids = NULL;
 
+	// ????
 	if (nvlist_lookup_uint64_array(resume_nvl,
 	    zfs_prop_to_name(ZFS_PROP_REDACT_SNAPS), &redact_snap_guids,
 	    (uint_t *)&num_redact_snaps) == 0) {
@@ -2131,6 +2140,8 @@ zfs_send_resume(libzfs_handle_t *hdl, sendflags_t *flags, int outfd,
 			}
 		}
 
+		// now we're using strings for both to and from
+		// (because we stuff those into the kernel via nvlist)
 		error = lzc_send_resume_redacted(zhp->zfs_name, fromname, outfd,
 		    lzc_flags, resumeobj, resumeoff, redact_book);
 		if (redact_book != NULL)

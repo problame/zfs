@@ -677,6 +677,9 @@ typedef struct sendflags {
 
 	/* include snapshot holds in send stream */
 	boolean_t holds;
+
+	char filesystem[ZFS_MAX_DATASET_NAME_LEN];
+
 } sendflags_t;
 
 typedef boolean_t (snapfilter_cb_t)(zfs_handle_t *, void *);
@@ -686,7 +689,7 @@ extern int zfs_send(zfs_handle_t *, const char *, const char *,
 extern int zfs_send_one(zfs_handle_t *, const char *, int, sendflags_t *,
     const char *);
 extern int zfs_send_progress(zfs_handle_t *, int, uint64_t *, uint64_t *);
-extern int zfs_send_resume(libzfs_handle_t *, sendflags_t *, int outfd,
+extern int zfs_send_resume(libzfs_handle_t *, zfs_handle_t *, sendflags_t *, int outfd,
     const char *);
 extern nvlist_t *zfs_send_resume_token_to_nvlist(libzfs_handle_t *hdl,
     const char *token);
