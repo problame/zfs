@@ -633,64 +633,84 @@ extern int zfs_rollback(zfs_handle_t *, zfs_handle_t *, boolean_t);
 extern int zfs_rename(zfs_handle_t *, const char *, boolean_t, boolean_t);
 
 typedef struct sendflags {
-	/* Amount of extra information to print. */
-	int verbosity;
+	struct {
+		/* Amount of extra information to print. */
+		int verbosity;
+		/* do not send (no-op, ie. -n) */
+		boolean_t dryrun;
 
-	/* recursive send  (ie, -R) */
-	boolean_t replicate;
+		/* parsable verbose output (ie. -P) */
+		boolean_t parsable;
 
-	/* for incrementals, do all intermediate snapshots */
-	boolean_t doall;
+		/* show progress (ie. -v) */
+		boolean_t progress;
 
-	/* if dataset is a clone, do incremental from its origin */
-	boolean_t fromorigin;
+	} display;
 
-	/* do deduplication */
-	boolean_t dedup;
+	struct {
+		/* recursive send  (ie, -R) */
+		boolean_t replicate;
 
-	/* send properties (ie, -p) */
-	boolean_t props;
+		/* for incrementals, do all intermediate snapshots (-I) */
+		boolean_t doall;
 
-	/* do not send (no-op, ie. -n) */
-	boolean_t dryrun;
+		/* if dataset is a clone, do incremental from its origin */
+		boolean_t fromorigin;
 
-	/* parsable verbose output (ie. -P) */
-	boolean_t parsable;
+		/* do deduplication */
+		boolean_t dedup;
 
-	/* show progress (ie. -v) */
-	boolean_t progress;
+		/* send properties (ie, -p) */
+		boolean_t props;
 
-	/* large blocks (>128K) are permitted */
-	boolean_t largeblock;
+		/* only send received properties (ie. -b) */
+		boolean_t backup;
 
-	/* WRITE_EMBEDDED records of type DATA are permitted */
-	boolean_t embed_data;
+		/* include snapshot holds in send stream */
+		boolean_t holds;
 
-	/* compressed WRITE records are permitted */
-	boolean_t compress;
+	} libzfs;
 
-	/* raw encrypted records are permitted */
-	boolean_t raw;
+	struct {
+		/* large blocks (>128K) are permitted */
+		boolean_t largeblock;
 
-	/* only send received properties (ie. -b) */
-	boolean_t backup;
+		/* WRITE_EMBEDDED records of type DATA are permitted */
+		boolean_t embed_data;
 
-	/* include snapshot holds in send stream */
-	boolean_t holds;
+		/* compressed WRITE records are permitted */
+		boolean_t compress;
 
-	char filesystem[ZFS_MAX_DATASET_NAME_LEN];
+		/* raw encrypted records are permitted */
+		boolean_t raw;
+		
+	} lzc_and_kernel;
+
+	char *resume_token;
+
+	char *fromname; // mutually exclusive with libzfs.fromorigin
+	char *toname;
+	char *redactbook;
+
 
 } sendflags_t;
 
+inline boolean_t sendflags_libzfs_empty(sendflags_t *f) {
+	return f->libzfs.replicate == B_FALSE
+		&& f->libzfs.doall == B_FALSE
+		&& f->libzfs.fromorigin == B_FALSE
+		&& f->libzfs.dedup == B_FALSE
+		&& f->libzfs.props == B_FALSE
+		&& f->libzfs.backup == B_FALSE
+		&& f->libzfs.holds  == B_FALSE;
+}
+
 typedef boolean_t (snapfilter_cb_t)(zfs_handle_t *, void *);
 
-extern int zfs_send(zfs_handle_t *, const char *, const char *,
-    sendflags_t *, int, snapfilter_cb_t, void *, nvlist_t **);
-extern int zfs_send_one(zfs_handle_t *, const char *, int, sendflags_t *,
-    const char *);
+extern int zfs_send(libzfs_handle_t *, sendflags_t *, int, snapfilter_cb_t, void *, nvlist_t **);
+extern int zfs_send_one(libzfs_handle_t *, sendflags_t *, int);
 extern int zfs_send_progress(zfs_handle_t *, int, uint64_t *, uint64_t *);
-extern int zfs_send_resume(libzfs_handle_t *, zfs_handle_t *, sendflags_t *, int outfd,
-    const char *);
+extern int zfs_send_resume(libzfs_handle_t *, sendflags_t *, int outfd);
 extern nvlist_t *zfs_send_resume_token_to_nvlist(libzfs_handle_t *hdl,
     const char *token);
 

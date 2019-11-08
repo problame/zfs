@@ -1982,8 +1982,7 @@ find_redact_book(libzfs_handle_t *hdl, const char *path,
 }
 
 int
-zfs_send_resume(libzfs_handle_t *hdl, zfs_handle_t *zhp, sendflags_t *flags, int outfd,
-    const char *resume_token)
+zfs_send_resume(libzfs_handle_t *hdl, sendflags_t *flags, int outfd)
 {
 	char errbuf[1024];
 	char *toname;
@@ -2346,11 +2345,7 @@ send_prelim_records(zfs_handle_t *zhp, const char *from, int fd,
 }
 
 /*
- * Generate a send stream.  The "zhp" argument is the filesystem/volume
- * that contains the snapshot to send.  The "fromsnap" argument is the
- * short name (the part after the '@') of the snapshot that is the
- * incremental source to send from (if non-NULL).  The "tosnap" argument
- * is the short name of the snapshot to send.
+ * Generate a send stream.
  *
  * The content of the send stream is the snapshot identified by
  * 'tosnap'.  Incremental streams are requested in two ways:
@@ -2366,7 +2361,7 @@ send_prelim_records(zfs_handle_t *zhp, const char *from, int fd,
  * case too. If "props" is set, send properties.
  */
 int
-zfs_send(zfs_handle_t *zhp, const char *fromsnap, const char *tosnap,
+zfs_send(zfs_handle_t *zhp,
     sendflags_t *flags, int outfd, snapfilter_cb_t filter_func,
     void *cb_arg, nvlist_t **debugnvp)
 {
@@ -2385,6 +2380,8 @@ zfs_send(zfs_handle_t *zhp, const char *fromsnap, const char *tosnap,
 
 	(void) snprintf(errbuf, sizeof (errbuf), dgettext(TEXT_DOMAIN,
 	    "cannot send '%s'"), zhp->zfs_name);
+
+	
 
 	if (fromsnap && fromsnap[0] == '\0') {
 		zfs_error_aux(zhp->zfs_hdl, dgettext(TEXT_DOMAIN,
@@ -2707,17 +2704,10 @@ snapshot_is_before(zfs_handle_t *earlier, zfs_handle_t *later)
 	return (ret);
 }
 
-/*
- * The "zhp" argument is the handle of the dataset to send (typically a
- * snapshot).  The "from" argument is the full name of the snapshot or
- * bookmark that is the incremental source.
- */
 int
-zfs_send_one(zfs_handle_t *zhp, const char *from, int fd, sendflags_t *flags,
-    const char *redactbook)
+zfs_send_one(libzfs_handle_t *hdl int fd, sendflags_t *flags)
 {
 	int err;
-	libzfs_handle_t *hdl = zhp->zfs_hdl;
 	int orig_fd = fd;
 	pthread_t ddtid, ptid;
 	progress_arg_t pa = { 0 };
@@ -2727,8 +2717,8 @@ zfs_send_one(zfs_handle_t *zhp, const char *from, int fd, sendflags_t *flags,
 	(void) snprintf(errbuf, sizeof (errbuf), dgettext(TEXT_DOMAIN,
 	    "warning: cannot send '%s'"), zhp->zfs_name);
 
-	if (from != NULL && strchr(from, '@')) {
-		zfs_handle_t *from_zhp = zfs_open(hdl, from,
+	if (flags.fromname != NULL && strchr(flags.fromname, '@')) {
+		zfs_handle_t *from_zhp = zfs_open(hdl, flags.fromname,
 		    ZFS_TYPE_DATASET);
 		if (from_zhp == NULL)
 			return (-1);
@@ -2740,6 +2730,11 @@ zfs_send_one(zfs_handle_t *zhp, const char *from, int fd, sendflags_t *flags,
 		}
 		zfs_close(from_zhp);
 	}
+	
+	zfs_handle_t *zhp = zfs_open(g_zfs, flags.toname, ZFS_TYPE_DATASET);
+	if (zhp == NULL)
+		return (1);
+	// FIXME zfs_close(zhp);
 
 	/*
 	 * Send fs properties

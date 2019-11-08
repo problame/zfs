@@ -4158,6 +4158,60 @@ usage:
 	return (-1);
 }
 
+static int
+zfs_do_send__monkeypatch_stdout(void) {
+	static char *stdout_file = NULL;
+	if (!stdout_file && (stdout_file = getenv("ZFS_SEND_STDOUT_FILE"))) {
+		fprintf(stderr, "duping %s to stdout\n", stdout_file);
+		int fd = TEMP_FAILURE_RETRY(open(stdout_file, O_WRONLY|O_CREAT|O_TRUNC, 0600));
+		if (fd < 0) {
+			fprintf(stderr, "%s cannot be opened for STDOUT redirection\n", stdout_file);
+			return 1;
+		}
+		if (dup2(fd, STDOUT_FILENO) == -1) {
+			fprintf(stderr, "error duping %s to stdout\n", stdout_file);
+			return 1;
+		}
+		// TEMP_FAILURE_RETRY(close(fd));
+		// STDOUT_FILENO now contains open file handle to 
+	}
+	return 0;
+}
+
+static void
+zfs_do_send__expand_snapnames(sendflags_t *flags) {
+	/* Normalize flags.fromname to [@#]snapname */
+	if (flags->fromname != NULL && (strchr(flags->fromname, '#') == NULL &&
+		strchr(flags->fromname, '@') == NULL)) {
+		/*
+		 * Neither bookmark or snapshot was specified.  Print a
+		 * warning, and assume snapshot.
+		 */
+		(void) fprintf(stderr, "Warning: incremental source "
+			"didn't specify type, assuming snapshot. Use '@' "
+			"or '#' prefix to avoid ambiguity.\n");
+		if (asprintf(&flags->fromname, "@%s", flags->fromname))
+			abort(); // malloc failed	
+		
+	}
+	/* Prepend filesystem to flags.fromname */
+	if (flags->fromname != NULL &&
+		(flags->fromname[0] == '#' || flags->fromname[0] == '@')) {
+		/*
+		 * Incremental source name begins with # or @.
+		 * Default to same fs as target.
+		 */
+		char tmpbuf[ZFS_MAX_DATASET_NAME_LEN];
+		(void) strlcpy(tmpbuf, flags->fromname, sizeof (tmpbuf));
+		char *frombuf = malloc(ZFS_MAX_DATASET_NAME_LEN);
+		(void) strlcpy(frombuf, flags->toname, sizeof (frombuf));
+		char *cp = strchr(frombuf, '@');
+		if (cp != NULL)
+			*cp = '\0';
+		(void) strlcat(frombuf, tmpbuf, sizeof (frombuf));
+		flags->fromname = frombuf;
+	}
+}
 
 /*
  * Send a backup stream to stdout.
@@ -4165,9 +4219,6 @@ usage:
 static int
 zfs_do_send(int argc, char **argv)
 {
-	char *fromname = NULL;
-	char *toname = NULL;
-	char *resume_token = NULL;
 	char *cp;
 	zfs_handle_t *zhp;
 	sendflags_t flags = { 0 };
@@ -4198,61 +4249,61 @@ zfs_do_send(int argc, char **argv)
 	    long_options, NULL)) != -1) {
 		switch (c) {
 		case 'i':
-			if (fromname)
+			if (flags.fromname)
 				usage(B_FALSE);
-			fromname = optarg;
+			flags.fromname = optarg;
 			break;
 		case 'I':
-			if (fromname)
+			if (flags.fromname)
 				usage(B_FALSE);
-			fromname = optarg;
-			flags.doall = B_TRUE;
+			flags.fromname = optarg;
+			flags.libzfs.doall = B_TRUE;
 			break;
 		case 'R':
-			flags.replicate = B_TRUE;
+			flags.libzfs.replicate = B_TRUE;
 			break;
 		case 'd':
 			redactbook = optarg;
 			break;
 		case 'p':
-			flags.props = B_TRUE;
+			flags.libzfs.props = B_TRUE;
 			break;
 		case 'b':
-			flags.backup = B_TRUE;
+			flags.libzfs.backup = B_TRUE;
 			break;
 		case 'h':
-			flags.holds = B_TRUE;
+			flags.libzfs.holds = B_TRUE;
 			break;
 		case 'P':
-			flags.parsable = B_TRUE;
+			flags.display.parsable = B_TRUE;
 			break;
 		case 'v':
-			flags.verbosity++;
-			flags.progress = B_TRUE;
+			flags.display.verbosity++;
+			flags.display.progress = B_TRUE;
 			break;
 		case 'D':
-			flags.dedup = B_TRUE;
+			flags.libzfs.dedup = B_TRUE;
 			break;
 		case 'n':
-			flags.dryrun = B_TRUE;
+			flags.display.dryrun = B_TRUE;
 			break;
 		case 'L':
-			flags.largeblock = B_TRUE;
+			flags.lzc_and_kernel.largeblock = B_TRUE;
 			break;
 		case 'e':
-			flags.embed_data = B_TRUE;
+			flags.lzc_and_kernel.embed_data = B_TRUE;
 			break;
 		case 't':
-			resume_token = optarg;
+			flags.resume_token = optarg;
 			break;
 		case 'c':
-			flags.compress = B_TRUE;
+			flags.lzc_and_kernel.compress = B_TRUE;
 			break;
 		case 'w':
-			flags.raw = B_TRUE;
-			flags.compress = B_TRUE;
-			flags.embed_data = B_TRUE;
-			flags.largeblock = B_TRUE;
+			flags.lzc_and_kernel.raw = B_TRUE;
+			flags.lzc_and_kernel.compress = B_TRUE;
+			flags.lzc_and_kernel.embed_data = B_TRUE;
+			flags.lzc_and_kernel.largeblock = B_TRUE;
 			break;
 		case ':':
 			/*
@@ -4295,131 +4346,74 @@ zfs_do_send(int argc, char **argv)
 		}
 	}
 
-	if (flags.parsable && flags.verbosity == 0)
-		flags.verbosity = 1;
+	if (flags.display.parsable && flags.display.verbosity == 0)
+		flags.display.verbosity = 1;
 
 	argc -= optind;
 	argv += optind;
 
-	if (resume_token != NULL) {
-		if (fromname != NULL || flags.replicate || flags.props ||
-		    flags.backup || flags.dedup || flags.holds ||
-		    redactbook != NULL) {
+	if (argc > 1) {
+		(void) fprintf(stderr, gettext("too many arguments\n"));
+		usage(B_FALSE);
+	}
+	if (argc == 1) {
+		flags.toname = argv[0];
+	}
+
+	if (flags.resume_token != NULL) {
+		if (flags.fromname != NULL || flags.fromname != NULL ||
+			flags.redactbook != NULL || !sendflags_libzfs_empty(&flags))
+			{
 			(void) fprintf(stderr,
 			    gettext("invalid flags combined with -t\n"));
 			usage(B_FALSE);
 		}
-		if (argc > 1) {
-			(void) fprintf(stderr, gettext("too many arguments\n"));
-			usage(B_FALSE);
-		}
-	} else {
-		if (argc < 1) {
-			(void) fprintf(stderr,
-			    gettext("missing snapshot argument\n"));
-			usage(B_FALSE);
-		}
-		if (argc > 1) {
-			(void) fprintf(stderr, gettext("too many arguments\n"));
-			usage(B_FALSE);
-		}
+	} else if (flags.toname == NULL) {
+		(void) fprintf(stderr, gettext("missing snapshot argument\n"));
+		usage(B_FALSE);
 	}
 
-	if (flags.raw && redactbook != NULL) {
+	if (flags.lzc_and_kernel.raw && flags.redactbook != NULL) {
 		(void) fprintf(stderr,
 		    gettext("Error: raw sends may not be redacted.\n"));
 		return (1);
 	}
 
-	static char *stdout_file = NULL;
-	if (!stdout_file && (stdout_file = getenv("ZFS_SEND_STDOUT_FILE"))) {
-		fprintf(stderr, "duping %s to stdout\n", stdout_file);
-		int fd = TEMP_FAILURE_RETRY(open(stdout_file, O_WRONLY|O_CREAT|O_TRUNC, 0600));
-		if (fd < 0) {
-			fprintf(stderr, "%s cannot be opened for STDOUT redirection\n", stdout_file);
-			return 1;
+	if (flags.redactbook != NULL && (flags.libzfs.replicate || flags.libzfs.doall)) {
+		if (strchr(flags.toname, '@') == NULL) {
+			(void) fprintf(stderr, gettext("Error: Cannot "
+				"do a redacted send to a filesystem.\n"));
+			return (1);
 		}
-		if (dup2(fd, STDOUT_FILENO) == -1) {
-			fprintf(stderr, "error duping %s to stdout\n", stdout_file);
-			return 1;
-		}
-		// TEMP_FAILURE_RETRY(close(fd));
-		// STDOUT_FILENO now contains open file handle to 
 	}
 
-	if (!flags.dryrun && isatty(STDOUT_FILENO)) {
+	if (zfs_do_send__monkeypatch_stdout()) {
+		return (1);
+	}
+
+	if (!flags.display.dryrun && isatty(STDOUT_FILENO)) {
 		(void) fprintf(stderr,
 		    gettext("Error: Stream can not be written to a terminal.\n"
 		    "You must redirect standard output.\n"));
 		return (1);
 	}
+	
+	zfs_do_send__expand_snapnames(&flags);
 
-	if (resume_token != NULL) {
-		zhp = NULL;
-		if (argc == 1) {
-			zhp = zfs_open(g_zfs, argv[0], ZFS_TYPE_DATASET);
-			if (zhp == NULL) {
-				// TODO error
-				return (1);
-			}
-		}
-		return (zfs_send_resume(g_zfs, zhp, &flags, STDOUT_FILENO,
-		    resume_token));
+	/* Sanity-checks done, branch off to the different send code paths */
+
+	if (flags.resume_token != NULL) {
+		assert(flags.redactbook == NULL);
+		return (zfs_send_resume(g_zfs, &flags, STDOUT_FILENO));
 	}
 
-	/*
-	 * For everything except -R and -I, use the new, cleaner code path.
-	 */
-	if (!(flags.replicate || flags.doall)) {
-		char frombuf[ZFS_MAX_DATASET_NAME_LEN];
-
-		if (redactbook != NULL) {
-			if (strchr(argv[0], '@') == NULL) {
-				(void) fprintf(stderr, gettext("Error: Cannot "
-				    "do a redacted send to a filesystem.\n"));
-				return (1);
-			}
-		}
-
-		zhp = zfs_open(g_zfs, argv[0], ZFS_TYPE_DATASET);
-		if (zhp == NULL)
-			return (1);
-
-		if (fromname != NULL && (strchr(fromname, '#') == NULL &&
-		    strchr(fromname, '@') == NULL)) {
-			/*
-			 * Neither bookmark or snapshot was specified.  Print a
-			 * warning, and assume snapshot.
-			 */
-			(void) fprintf(stderr, "Warning: incremental source "
-			    "didn't specify type, assuming snapshot. Use '@' "
-			    "or '#' prefix to avoid ambiguity.\n");
-			(void) snprintf(frombuf, sizeof (frombuf), "@%s",
-			    fromname);
-			fromname = frombuf;
-		}
-		if (fromname != NULL &&
-		    (fromname[0] == '#' || fromname[0] == '@')) {
-			/*
-			 * Incremental source name begins with # or @.
-			 * Default to same fs as target.
-			 */
-			char tmpbuf[ZFS_MAX_DATASET_NAME_LEN];
-			(void) strlcpy(tmpbuf, fromname, sizeof (tmpbuf));
-			(void) strlcpy(frombuf, argv[0], sizeof (frombuf));
-			cp = strchr(frombuf, '@');
-			if (cp != NULL)
-				*cp = '\0';
-			(void) strlcat(frombuf, tmpbuf, sizeof (frombuf));
-			fromname = frombuf;
-		}
-		err = zfs_send_one(zhp, fromname, STDOUT_FILENO, &flags,
-		    redactbook);
-		zfs_close(zhp);
-		return (err != 0);
+	if (!(flags.libzfs.replicate || flags.libzfs.doall)) {
+		return (zfs_send_one(g_zfs, &flags, STDOUT_FILENO));
 	}
 
-	if (fromname != NULL && strchr(fromname, '#')) {
+	/* -R and -I are the legacy code path */
+
+	if (flags.fromname != NULL && strchr(flags.fromname, '#')) {
 		(void) fprintf(stderr,
 		    gettext("Error: multiple snapshots cannot be "
 		    "sent from a bookmark.\n"));
@@ -4432,13 +4426,14 @@ zfs_do_send(int argc, char **argv)
 		return (1);
 	}
 
-	if ((cp = strchr(argv[0], '@')) == NULL) {
+	if ((cp = strchr(flags.toname, '@')) == NULL) {
 		(void) fprintf(stderr, gettext("Error: "
-		    "Unsupported flag with filesystem or bookmark.\n"));
+		    "Positional argument must be a snapshot.\n")); // FIXME msg
 		return (1);
 	}
 	*cp = '\0';
-	toname = cp + 1;
+	flags.toname = cp + 1;
+
 	zhp = zfs_open(g_zfs, argv[0], ZFS_TYPE_FILESYSTEM | ZFS_TYPE_VOLUME);
 	if (zhp == NULL)
 		return (1);
@@ -4448,40 +4443,41 @@ zfs_do_send(int argc, char **argv)
 	 * everything except the short name of the snapshot, but special
 	 * case if they specify the origin.
 	 */
-	if (fromname && (cp = strchr(fromname, '@')) != NULL) {
+	if (flags.fromname && (cp = strchr(flags.fromname, '@')) != NULL) {
 		char origin[ZFS_MAX_DATASET_NAME_LEN];
 		zprop_source_t src;
 
 		(void) zfs_prop_get(zhp, ZFS_PROP_ORIGIN,
 		    origin, sizeof (origin), &src, NULL, 0, B_FALSE);
 
-		if (strcmp(origin, fromname) == 0) {
-			fromname = NULL;
-			flags.fromorigin = B_TRUE;
+		if (strcmp(origin, flags.fromname) == 0) {
+			flags.fromname = NULL;
+			flags.libzfs.fromorigin = B_TRUE;
 		} else {
 			*cp = '\0';
-			if (cp != fromname && strcmp(argv[0], fromname)) {
+			if (cp != flags.fromname && strcmp(flags.toname, flags.fromname)) {
 				(void) fprintf(stderr,
 				    gettext("incremental source must be "
 				    "in same filesystem\n"));
 				usage(B_FALSE);
 			}
-			fromname = cp + 1;
-			if (strchr(fromname, '@') || strchr(fromname, '/')) {
+			flags.fromname = cp + 1;
+			if (strchr(flags.fromname, '@') || strchr(flags.fromname, '/')) {
 				(void) fprintf(stderr,
 				    gettext("invalid incremental source\n"));
 				usage(B_FALSE);
 			}
 		}
 	}
+	zfs_close(zhp);
 
-	if (flags.replicate && fromname == NULL)
-		flags.doall = B_TRUE;
+	if (flags.libzfs.replicate && flags.fromname == NULL)
+		flags.libzfs.doall = B_TRUE;
 
-	err = zfs_send(zhp, fromname, toname, &flags, STDOUT_FILENO, NULL, 0,
-	    flags.verbosity >= 3 ? &dbgnv : NULL);
+	err = zfs_send(g_zfs, &flags, STDOUT_FILENO, NULL, 0,
+	    flags.display.verbosity >= 3 ? &dbgnv : NULL);
 
-	if (flags.verbosity >= 3 && dbgnv != NULL) {
+	if (flags.display.verbosity >= 3 && dbgnv != NULL) {
 		/*
 		 * dump_nvlist prints to stdout, but that's been
 		 * redirected to a file.  Make it print to stderr
@@ -4491,7 +4487,6 @@ zfs_do_send(int argc, char **argv)
 		dump_nvlist(dbgnv, 0);
 		nvlist_free(dbgnv);
 	}
-	zfs_close(zhp);
 
 	return (err != 0);
 }
