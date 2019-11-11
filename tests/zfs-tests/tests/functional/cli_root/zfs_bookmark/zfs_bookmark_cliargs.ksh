@@ -32,11 +32,19 @@
 #
 # STRATEGY:
 # 1. Create initial snapshot
+#
 # 2. Verify we can create a bookmark specifying snapshot and bookmark full paths
-# 3. Verify we can create a bookmark specifying the snapshot name
-# 4. Verify we can create a bookmark specifying the bookmark name
+# 3. Verify we can create a bookmark specifying the short snapshot name
+# 4. Verify we can create a bookmark specifying the short bookmark name
 # 5. Verify at least a full dataset path is required and both snapshot and
 #    bookmark name must be valid
+#
+# 6. Verify we can copy a bookmark by specifying the target bookmark and new
+#    bookmark full paths.
+# 7. Verify we can copy a bookmark specifying the short target name
+# 8. Verify we can copy a bookmark specifying the short new name
+# 9. Verify two short paths are not allowed, and test empty paths
+# 10. Verify we cannot copy a bookmark if the new bookmark already exists
 #
 
 verify_runnable "both"
@@ -49,6 +57,9 @@ function cleanup
 	if bkmarkexists "$DATASET#$TESTBM"; then
 		log_must zfs destroy "$DATASET#$TESTBM"
 	fi
+	if bkmarkexists "$DATASET#$TESTBMCOPY"; then
+		log_must zfs destroy "$DATASET#$TESTBMCOPY"
+	fi
 }
 
 log_assert "'zfs bookmark' should work only when passed valid arguments."
@@ -57,9 +68,15 @@ log_onexit cleanup
 DATASET="$TESTPOOL/$TESTFS"
 TESTSNAP='snapshot'
 TESTBM='bookmark'
+TESTBMCOPY='bookmark_copy'
+
 
 # Create initial snapshot
 log_must zfs snapshot "$DATASET@$TESTSNAP"
+
+#
+# Bookmark creation tests
+#
 
 # Verify we can create a bookmark specifying snapshot and bookmark full paths
 log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
@@ -96,5 +113,49 @@ log_mustnot zfs bookmark "@$TESTSNAP" "$DATASET"
 log_mustnot zfs bookmark "$TESTSNAP" "$DATASET#"
 log_mustnot zfs bookmark "$TESTSNAP" "$DATASET"
 log_mustnot eval "bkmarkexists $DATASET#$TESTBM"
+
+#
+# Bookmark copying tests
+#
+
+# create the target bookmark
+log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
+
+# Verify we can copy a bookmark by specifying the target bookmark
+# and new bookmark full paths.
+log_must eval "bkmarkexists $DATASET#$TESTBM"
+log_must zfs bookmark "$DATASET#$TESTBM" "$DATASET#$TESTBMCOPY"
+log_must eval "bkmarkexists $DATASET#$TESTBMCOPY"
+## validate destroy once (should be truly independent bookmarks)
+log_must zfs destroy "$DATASET#$TESTBM"
+log_mustnot eval "bkmarkexists $DATASET#$TESTBM"
+log_must eval "bkmarkexists $DATASET#$TESTBMCOPY"
+log_must zfs destroy "$DATASET#$TESTBMCOPY"
+log_mustnot eval "bkmarkexists $DATASET#$TESTBMCOPY"
+log_mustnot eval "bkmarkexists $DATASET#$TESTBM"
+## recreate the target bookmark
+log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
+
+# Verify we can copy a bookmark specifying the short target name
+log_must zfs bookmark "#$TESTBM" "$DATASET#$TESTBMCOPY"
+log_must eval "bkmarkexists $DATASET#$TESTBMCOPY"
+log_must zfs destroy "$DATASET#$TESTBMCOPY"
+
+# Verify we can copy a bookmark specifying the short bookmark name
+log_must zfs bookmark "$DATASET#$TESTBM" "#$TESTBMCOPY"
+log_must eval "bkmarkexists $DATASET#$TESTBMCOPY"
+log_must zfs destroy "$DATASET#$TESTBMCOPY"
+
+# Verify two short paths are not allowed, and test empty paths
+log_mustnot zfs bookmark "#$TESTBM" "#$TESTBMCOPY"
+log_mustnot zfs bookmark "#$TESTBM" "#"
+log_mustnot zfs bookmark "#"        "#$TESTBMCOPY"
+log_mustnot zfs bookmark "#"        "#"
+log_mustnot zfs bookmark "#"        ""
+log_mustnot zfs bookmark ""         "#"
+log_mustnot zfs bookmark ""         ""
+
+# Verify we cannot copy a bookmark if the new bookmark already exists
+log_mustnot zfs bookmark "$DATASET#$TESTBM" "$DATASET#$TESTBM"
 
 log_pass "'zfs bookmark' works as expected only when passed valid arguments."

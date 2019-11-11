@@ -370,7 +370,7 @@ get_usage(zfs_help_t idx)
 		return (gettext("\tdiff [-FHt] <snapshot> "
 		    "[snapshot|filesystem]\n"));
 	case HELP_BOOKMARK:
-		return (gettext("\tbookmark <snapshot> <bookmark>\n"));
+		return (gettext("\tbookmark <snapshot|bookmark> <bookmark>\n"));
 	case HELP_CHANNEL_PROGRAM:
 		return (gettext("\tprogram [-jn] [-t <instruction limit>] "
 		    "[-m <memory limit (b)>]\n"
@@ -7471,16 +7471,17 @@ out:
 }
 
 /*
- * zfs bookmark <fs@snap> <fs#bmark>
+ * zfs bookmark <fs@target>|<fs#target> <fs#bookmark>
  *
- * Creates a bookmark with the given name from the given snapshot.
+ * Creates a bookmark with the given name from the target snapshot
+ * or creates a copy of an existing target bookmark.
  */
 static int
 zfs_do_bookmark(int argc, char **argv)
 {
-	char snapname[ZFS_MAX_DATASET_NAME_LEN];
-	char bookname[ZFS_MAX_DATASET_NAME_LEN];
-	zfs_handle_t *zhp;
+	char *target, *bookname;
+	char expbuf[ZFS_MAX_DATASET_NAME_LEN];
+	int target_type;
 	nvlist_t *nvl;
 	int ret = 0;
 	int c;
@@ -7500,7 +7501,7 @@ zfs_do_bookmark(int argc, char **argv)
 
 	/* check number of arguments */
 	if (argc < 1) {
-		(void) fprintf(stderr, gettext("missing snapshot argument\n"));
+		(void) fprintf(stderr, gettext("missing target argument\n"));
 		goto usage;
 	}
 	if (argc < 2) {
@@ -7508,51 +7509,74 @@ zfs_do_bookmark(int argc, char **argv)
 		goto usage;
 	}
 
-	if (strchr(argv[0], '@') == NULL) {
+	target = argv[0];
+	bookname = argv[1];
+
+	if (strchr(target, '@') == NULL && strchr(target, '#') == NULL) {
 		(void) fprintf(stderr,
-		    gettext("invalid snapshot name '%s': "
-		    "must contain a '@'\n"), argv[0]);
+		    gettext("invalid target name '%s': "
+		    "must contain a '@' or '#'\n"), target);
 		goto usage;
 	}
-	if (strchr(argv[1], '#') == NULL) {
+	if (strchr(bookname, '#') == NULL) {
 		(void) fprintf(stderr,
 		    gettext("invalid bookmark name '%s': "
-		    "must contain a '#'\n"), argv[1]);
+		    "must contain a '#'\n"), bookname);
 		goto usage;
 	}
 
-	if (argv[0][0] == '@') {
-		/*
-		 * Snapshot name begins with @.
-		 * Default to same fs as bookmark.
-		 */
-		(void) strlcpy(snapname, argv[1], sizeof (snapname));
-		*strchr(snapname, '#') = '\0';
-		(void) strlcat(snapname, argv[0], sizeof (snapname));
-	} else {
-		(void) strlcpy(snapname, argv[0], sizeof (snapname));
-	}
-	if (argv[1][0] == '#') {
-		/*
-		 * Bookmark name begins with #.
-		 * Default to same fs as snapshot.
-		 */
-		(void) strlcpy(bookname, argv[0], sizeof (bookname));
-		*strchr(bookname, '@') = '\0';
-		(void) strlcat(bookname, argv[1], sizeof (bookname));
-	} else {
-		(void) strlcpy(bookname, argv[1], sizeof (bookname));
+	/*
+	 * expand target or bookname to full path:
+	 * one of them may be specified as short name
+	 */
+	{
+		char **expand;
+		char *target_short, *bookname_short;
+		target_short = strpbrk(target, "@#");
+		bookname_short = strpbrk(bookname, "#");
+		if (target_short == target &&
+			bookname_short == bookname) {
+			gettext("either target or bookmark must be specified as full dataset paths");
+			goto usage;
+		} else if (target_short != target && bookname_short != bookname) {
+			expand = NULL;
+		} else if (target_short != target) {
+			strlcpy(expbuf, target, sizeof(expbuf));
+			expand = &bookname;
+		} else if (bookname_short != bookname) {
+			strlcpy(expbuf, bookname, sizeof(expbuf));
+			expand = &target;
+		} else {
+			assert(0);
+		}
+		if (expand != NULL) {
+			*strpbrk(expbuf, "@#") = '\0'; /* dataset name in buf */
+			(void) strlcat(expbuf, *expand, sizeof(expbuf));
+			*expand = expbuf;
+		}
 	}
 
-	zhp = zfs_open(g_zfs, snapname, ZFS_TYPE_SNAPSHOT);
+	/* determine target type */
+	switch(*strpbrk(target, "@#")) {
+		case '@': target_type = ZFS_TYPE_SNAPSHOT; break;
+		case '#': target_type = ZFS_TYPE_BOOKMARK; break;
+		default: abort();
+	}
+
+	/* test the target exists */
+	zfs_handle_t *zhp;
+	zhp = zfs_open(g_zfs, target, target_type);
 	if (zhp == NULL)
 		goto usage;
 	zfs_close(zhp);
 
-
 	nvl = fnvlist_alloc();
-	fnvlist_add_string(nvl, bookname, snapname);
-	ret = lzc_bookmark(nvl, NULL);
+	fnvlist_add_string(nvl, bookname, target);
+	if (strchr(target, '@') != NULL) {
+		ret = lzc_bookmark(nvl, NULL);
+	} else if (strchr(target, '#') != NULL) {
+		ret = lzc_bookmark_clone(nvl, NULL);
+	}
 	fnvlist_free(nvl);
 
 	if (ret != 0) {

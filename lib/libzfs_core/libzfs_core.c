@@ -1155,6 +1155,39 @@ lzc_bookmark(nvlist_t *bookmarks, nvlist_t **errlist)
 	return (error);
 }
 
+
+/*
+ * Clones existing bookmarks.
+ *
+ * The bookmarks nvlist maps from the full name of the new bookmark to
+ * the full name of the target bookmark. All of the bookmarks
+ * must be in the same pool. The new bookmark names must be unique.
+ *
+ * The returned results nvlist will have an entry for each bookmark that failed.
+ * The value will be the (int32) error code.
+ *
+ * The return value will be 0 if all bookmarks were created, otherwise it will
+ * be the errno of a (undetermined) bookmarks that failed.
+ */
+int
+lzc_bookmark_clone(nvlist_t *bookmarks, nvlist_t **errlist)
+{
+	nvpair_t *elem;
+	int error;
+	char pool[ZFS_MAX_DATASET_NAME_LEN];
+
+	/* determine the pool name */
+	elem = nvlist_next_nvpair(bookmarks, NULL);
+	if (elem == NULL)
+		return (0);
+	(void) strlcpy(pool, nvpair_name(elem), sizeof (pool));
+	pool[strcspn(pool, "/#")] = '\0';
+
+	error = lzc_ioctl(ZFS_IOC_BOOKMARK_CLONE, pool, bookmarks, errlist);
+
+	return (error);
+}
+
 /*
  * Retrieve bookmarks.
  *

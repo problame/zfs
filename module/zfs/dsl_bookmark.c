@@ -178,7 +178,10 @@ dsl_bookmark_create_check(void *arg, dmu_tx_t *tx)
 		dsl_dataset_t *snapds;
 		int error;
 
-		/* note: validity of nvlist checked by ioctl layer */
+		/*
+		 * We assume that dbcc_bmarks has unique names (keys)
+		 * This is enforced by zfs_ioc_bookmark.
+		 */
 		error = dsl_dataset_hold(dp, fnvpair_value_string(pair),
 		    FTAG, &snapds);
 		if (error == 0) {
@@ -253,6 +256,17 @@ dsl_bookmark_set_phys(zfs_bookmark_phys_t *zbm, dsl_dataset_t *snap)
 		    sizeof (zfs_bookmark_phys_t) -
 		    offsetof(zfs_bookmark_phys_t, zbm_flags));
 	}
+}
+
+/*
+ * Copy the fields from zfs_bookmark_phys_t `from` to `to`.
+ */
+static void
+dsl_bookmark_copy_phys(zfs_bookmark_phys_t *to, zfs_bookmark_phys_t *from)
+{
+	// TODO is this correct and sufficient?
+	// TODO    manually tested for simple bookmarks
+	memcpy(to, from, sizeof(*to));
 }
 
 void
@@ -410,6 +424,148 @@ dsl_bookmark_create(nvlist_t *bmarks, nvlist_t *errors)
 
 	return (dsl_sync_task(nvpair_name(pair), dsl_bookmark_create_check,
 	    dsl_bookmark_create_sync, &dbca,
+	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL));
+}
+
+typedef struct dsl_bookmark_clone_arg {
+	nvlist_t *dbcc_bmarks;
+	nvlist_t *dbcc_errors;
+} dsl_bookmark_clone_arg_t;
+
+static int
+dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
+{
+	dsl_pool_t *dp = dmu_tx_pool(tx);
+	int error;
+	zfs_bookmark_phys_t bmark_phys = { 0 };
+
+	/* Verify that the new bookmark does not already exist */
+	error = dsl_bookmark_lookup(dp, nvpair_name(pair), NULL, &bmark_phys);
+	switch (error) {
+	case 0:
+		return (SET_ERROR(EEXIST));
+	case ESRCH:
+		/* happy path: new bmark doesn't exist, proceed after switch */
+		break;
+	default:
+		return (error);
+	}
+
+	/* Verify that the target bookmark exists */
+	error = dsl_bookmark_lookup(dp, fnvpair_value_string(pair), NULL, &bmark_phys);
+	if (error != 0) {
+		return (error);
+	}
+
+	return (0);
+}
+
+static int
+dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
+{
+	dprintf("dsl_bookmark_clone_check began\n");
+	dsl_bookmark_clone_arg_t *dbcc = arg;
+	dsl_pool_t *dp = dmu_tx_pool(tx);
+	int rv = 0;
+
+	if (!spa_feature_is_enabled(dp->dp_spa, SPA_FEATURE_BOOKMARKS))
+		return (SET_ERROR(ENOTSUP));
+
+	for (nvpair_t *pair = nvlist_next_nvpair(dbcc->dbcc_bmarks, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(dbcc->dbcc_bmarks, pair)) {
+		int error;
+
+		/*
+		 * We assume that dbcc_bmarks has unique names (keys)
+		 * This is enforced by zfs_ioc_bookmark_clone
+		 */
+
+		error = dsl_bookmark_clone_check_impl(pair,  tx);
+		if (error != 0) {
+			fnvlist_add_int32(dbcc->dbcc_errors, nvpair_name(pair), error);
+			rv = error;
+		}
+	}
+
+	return (rv);
+}
+
+static void
+dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
+    dmu_tx_t *tx, uint64_t num_redact_snaps, uint64_t *redact_snaps, void *tag,
+    redaction_list_t **redaction_list)
+{
+	dsl_pool_t *dp = dmu_tx_pool(tx);
+	dsl_dataset_t *bmark_fs_target, *bmark_fs_new;
+	char *target_shortname, *new_shortname;
+	zfs_bookmark_phys_t target_phys;
+
+	// TODO need hold pool? dsl_get_bookmark_props makes it seem like we should...?
+
+	VERIFY0(dsl_bookmark_hold_ds(dp, target_name, &bmark_fs_target, FTAG,
+	    &target_shortname));
+	VERIFY0(dsl_bookmark_hold_ds(dp, new_name, &bmark_fs_new, FTAG,
+	    &new_shortname));
+
+	// TODO assert bmark_fs_target's filesystem is the same as bmark_fs_new's filesystem
+
+	/* copy target phys to new phys */
+	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_target, target_shortname, &target_phys));
+	dsl_bookmark_node_t *new_dbn = dsl_bookmark_node_alloc(new_shortname);
+	dsl_bookmark_copy_phys(&new_dbn->dbn_phys, &target_phys);
+
+	// TODO need to take care of take care of redaction bookmarks?
+
+	if (new_dbn->dbn_phys.zbm_flags & ZBM_FLAG_HAS_FBN) {
+		spa_feature_incr(dp->dp_spa,
+		    SPA_FEATURE_BOOKMARK_WRITTEN, tx);
+	}
+
+	dsl_bookmark_node_add(bmark_fs_new, new_dbn, tx);
+
+	spa_history_log_internal_ds(bmark_fs_target, "bookmark_clone", tx,
+	    "name=%s creation_txg=%llu target_guid=%llu",
+	    new_shortname, (longlong_t)new_dbn->dbn_phys.zbm_creation_txg,
+	    (longlong_t)target_phys.zbm_guid
+	);
+
+	dsl_dataset_rele(bmark_fs_target, FTAG);
+	dsl_dataset_rele(bmark_fs_new, FTAG);
+}
+
+static void
+dsl_bookmark_clone_sync(void *arg, dmu_tx_t *tx)
+{
+	dsl_bookmark_clone_arg_t *dbcc = arg;
+
+	ASSERT(spa_feature_is_enabled(dmu_tx_pool(tx)->dp_spa,
+	    SPA_FEATURE_BOOKMARKS));
+
+	for (nvpair_t *pair = nvlist_next_nvpair(dbcc->dbcc_bmarks, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(dbcc->dbcc_bmarks, pair)) {
+		dsl_bookmark_clone_sync_impl(nvpair_name(pair),
+		    fnvpair_value_string(pair), tx, 0, NULL, NULL, NULL);
+	}
+}
+
+/*
+ * The bookmarks must all be in the same pool.
+ */
+int
+dsl_bookmark_clone(nvlist_t *bmarks, nvlist_t *errors)
+{
+	nvpair_t *pair;
+	dsl_bookmark_clone_arg_t dbcc;
+
+	pair = nvlist_next_nvpair(bmarks, NULL);
+	if (pair == NULL)
+		return (0);
+
+	dbcc.dbcc_bmarks = bmarks;
+	dbcc.dbcc_errors = errors;
+
+	return (dsl_sync_task(nvpair_name(pair), dsl_bookmark_clone_check,
+	    dsl_bookmark_clone_sync, &dbcc,
 	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL));
 }
 

@@ -56,6 +56,7 @@ int lzc_clone(const char *, const char *, nvlist_t *);
 int lzc_promote(const char *, char *, int);
 int lzc_destroy_snaps(nvlist_t *, boolean_t, nvlist_t **);
 int lzc_bookmark(nvlist_t *, nvlist_t **);
+int lzc_bookmark_clone(nvlist_t *, nvlist_t **);
 int lzc_get_bookmarks(const char *, nvlist_t *, nvlist_t **);
 int lzc_get_bookmark_props(const char *, nvlist_t **);
 int lzc_destroy_bookmarks(nvlist_t *, nvlist_t **);

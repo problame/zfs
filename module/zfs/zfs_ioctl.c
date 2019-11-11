@@ -997,6 +997,35 @@ zfs_secpolicy_bookmark(zfs_cmd_t *zc, nvlist_t *innvl, cred_t *cr)
 	return (error);
 }
 
+
+/*
+ * Check for permission to clone each bookmark in the nvlist.
+ */
+/* ARGSUSED */
+static int
+zfs_secpolicy_bookmark_clone(zfs_cmd_t *zc, nvlist_t *innvl, cred_t *cr)
+{
+	int error = 0;
+
+	for (nvpair_t *pair = nvlist_next_nvpair(innvl, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(innvl, pair)) {
+		char *name = nvpair_name(pair);
+		char *hashp = strchr(name, '#');
+
+		if (hashp == NULL) {
+			error = SET_ERROR(EINVAL);
+			break;
+		}
+		*hashp = '\0';
+		error = zfs_secpolicy_write_perms(name,
+		    ZFS_DELEG_PERM_BOOKMARK, cr);
+		*hashp = '#';
+		if (error != 0)
+			break;
+	}
+	return (error);
+}
+
 /* ARGSUSED */
 static int
 zfs_secpolicy_destroy_bookmarks(zfs_cmd_t *zc, nvlist_t *innvl, cred_t *cr)
@@ -3649,6 +3678,48 @@ zfs_ioc_bookmark(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 	}
 
 	return (dsl_bookmark_create(innvl, outnvl));
+}
+
+
+/*
+ * Clone existing bookmarks. Bookmark names are of the form <fs>#<bmark>.
+ * All bookmarks must be in the same pool.
+ *
+ * innvl: {
+ *     new_bookmark1 -> target_bm1, new_bookmark2 -> target_bm2
+ * }
+ *
+ * outnvl: bookmark -> error code (int32)
+ *
+ */
+static const zfs_ioc_key_t zfs_keys_bookmark_clone[] = {
+	{"<bookmark>...",	DATA_TYPE_STRING,	ZK_WILDCARDLIST},
+};
+
+/* ARGSUSED */
+static int
+zfs_ioc_bookmark_clone(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
+{
+	for (nvpair_t *pair = nvlist_next_nvpair(innvl, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(innvl, pair)) {
+		char *target_bmark;
+
+		/*
+		 * Verify that the target is a string.
+		 */
+		if (nvpair_value_string(pair, &target_bmark) != 0)
+			return (SET_ERROR(EINVAL));
+
+
+		/* Verify that the keys (bookmarks) are unique */
+		for (nvpair_t *pair2 = nvlist_next_nvpair(innvl, pair);
+		    pair2 != NULL; pair2 = nvlist_next_nvpair(innvl, pair2)) {
+			if (strcmp(nvpair_name(pair), nvpair_name(pair2)) == 0)
+				return (SET_ERROR(EINVAL));
+		}
+	}
+
+	return (dsl_bookmark_clone(innvl, outnvl));
 }
 
 /*
@@ -6844,6 +6915,11 @@ zfs_ioctl_init(void)
 	    zfs_ioc_bookmark, zfs_secpolicy_bookmark, POOL_NAME,
 	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_TRUE, B_TRUE,
 	    zfs_keys_bookmark, ARRAY_SIZE(zfs_keys_bookmark));
+
+	zfs_ioctl_register("bookmark_clone", ZFS_IOC_BOOKMARK_CLONE,
+	    zfs_ioc_bookmark_clone, zfs_secpolicy_bookmark_clone, POOL_NAME,
+	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_TRUE, B_TRUE,
+	    zfs_keys_bookmark_clone, ARRAY_SIZE(zfs_keys_bookmark_clone));
 
 	zfs_ioctl_register("get_bookmarks", ZFS_IOC_GET_BOOKMARKS,
 	    zfs_ioc_get_bookmarks, zfs_secpolicy_read, DATASET_NAME,
