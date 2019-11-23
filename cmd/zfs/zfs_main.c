@@ -7582,6 +7582,8 @@ zfs_do_bookmark(int argc, char **argv)
 		ret = lzc_bookmark(nvl, NULL);
 	} else if (strchr(target, '#') != NULL) {
 		ret = lzc_bookmark_clone(nvl, NULL);
+	} else {
+		abort();
 	}
 	fnvlist_free(nvl);
 

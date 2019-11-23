@@ -259,16 +259,9 @@ dsl_bookmark_set_phys(zfs_bookmark_phys_t *zbm, dsl_dataset_t *snap)
 }
 
 /*
- * Copy the fields from zfs_bookmark_phys_t `from` to `to`.
+ * Add dsl_bookmark_node_t `dbn` to the given dataset and increment appropriate
+ * SPA feature counters.
  */
-static void
-dsl_bookmark_copy_phys(zfs_bookmark_phys_t *to, zfs_bookmark_phys_t *from)
-{
-	// TODO is this correct and sufficient?
-	// TODO    manually tested for simple bookmarks
-	memcpy(to, from, sizeof(*to));
-}
-
 void
 dsl_bookmark_node_add(dsl_dataset_t *hds, dsl_bookmark_node_t *dbn,
     dmu_tx_t *tx)
@@ -499,8 +492,7 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	dsl_dataset_t *bmark_fs_target, *bmark_fs_new;
 	char *target_shortname, *new_shortname;
 	zfs_bookmark_phys_t target_phys;
-
-	// TODO need hold pool? dsl_get_bookmark_props makes it seem like we should...?
+	boolean_t target_redacted;
 
 	VERIFY0(dsl_bookmark_hold_ds(dp, target_name, &bmark_fs_target, FTAG,
 	    &target_shortname));
@@ -509,16 +501,24 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 
 	// TODO assert bmark_fs_target's filesystem is the same as bmark_fs_new's filesystem
 
-	/* copy target phys to new phys */
+	/* make the copy */
 	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_target, target_shortname, &target_phys));
 	dsl_bookmark_node_t *new_dbn = dsl_bookmark_node_alloc(new_shortname);
-	dsl_bookmark_copy_phys(&new_dbn->dbn_phys, &target_phys);
+	memcpy(&new_dbn->dbn_phys, &target_phys, sizeof(target_phys));
+	target_redacted = new_dbn->dbn_phys.zbm_redaction_obj != 0;
+	if (target_redacted) {
+		// TODO copy zbm_redaction_obj and adjust new_dbn->dbn_phys.zbm_redaction_obj
+	}
 
-	// TODO need to take care of take care of redaction bookmarks?
-
+	/* update feature flags */
 	if (new_dbn->dbn_phys.zbm_flags & ZBM_FLAG_HAS_FBN) {
 		spa_feature_incr(dp->dp_spa,
 		    SPA_FEATURE_BOOKMARK_WRITTEN, tx);
+	}
+	if (target_redacted) {
+		spa_feature_incr(dp->dp_spa,
+		    SPA_FEATURE_REDACTION_BOOKMARKS, tx);
+		/* SPA_FEATURE_BOOKMARK_V2 is incremented by dsl_bookmark_node_add */
 	}
 
 	dsl_bookmark_node_add(bmark_fs_new, new_dbn, tx);
