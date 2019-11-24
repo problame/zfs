@@ -28,4 +28,7 @@
 
 DISK=${DISKS%% *}
 
-default_volume_setup $DISK
+default_setup_noexit $DISK
+log_must zfs create "$TESTPOOL/$TESTFS/child"
+log_must zfs create "$TESTPOOL/${TESTFS}_with_suffix"
+log_pass

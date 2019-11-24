@@ -45,6 +45,8 @@
 # 8. Verify we can copy a bookmark specifying the short new name
 # 9. Verify two short paths are not allowed, and test empty paths
 # 10. Verify we cannot copy a bookmark if the new bookmark already exists
+# 11. Verify that copying a bookmark only works if new and target name
+#     have the same dataset
 #
 
 verify_runnable "both"
@@ -157,5 +159,11 @@ log_mustnot zfs bookmark ""         ""
 
 # Verify we cannot copy a bookmark if the new bookmark already exists
 log_mustnot zfs bookmark "$DATASET#$TESTBM" "$DATASET#$TESTBM"
+
+# Verify that copying a bookmark only works if new and target name
+# have the same dataset
+log_must eval "datasetexists $TESTPOOL/$TESTFS/child"
+log_mustnot zfs bookmark "$TESTPOOL/$TESTFS#$TESTBM" "$TESTPOOL/$TESTFS/child#$TESTBM"
+log_mustnot zfs bookmark "$TESTPOOL/$TESTFS#$TESTBM" "$TESTPOOL/${TESTFS}_with_suffix#$TESTBM"
 
 log_pass "'zfs bookmark' works as expected only when passed valid arguments."
