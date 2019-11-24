@@ -477,13 +477,13 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 		/* happy path: new bmark doesn't exist, proceed after switch */
 		break;
 	default:
-		return (error);
+		return (SET_ERROR(error));
 	}
 
 	/* Verify that the target bookmark exists */
 	error = dsl_bookmark_lookup(dp, fnvpair_value_string(pair), NULL, &bmark_phys);
 	if (error != 0) {
-		return (error);
+		return (SET_ERROR(error));
 	}
 
 	return (0);
