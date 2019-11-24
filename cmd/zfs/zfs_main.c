@@ -7541,29 +7541,31 @@ zfs_do_bookmark(int argc, char **argv)
 		target_short = strpbrk(target, "@#");
 		bookname_short = strpbrk(bookname, "#");
 		if (target_short == target &&
-			bookname_short == bookname) {
-			gettext("either target or bookmark must be specified as full dataset paths");
+		    bookname_short == bookname) {
+			gettext("either target or bookmark must be specified "
+			    "as full dataset paths");
 			goto usage;
-		} else if (target_short != target && bookname_short != bookname) {
+		} else if (target_short != target &&
+		    bookname_short != bookname) {
 			expand = NULL;
 		} else if (target_short != target) {
-			strlcpy(expbuf, target, sizeof(expbuf));
+			strlcpy(expbuf, target, sizeof (expbuf));
 			expand = &bookname;
 		} else if (bookname_short != bookname) {
-			strlcpy(expbuf, bookname, sizeof(expbuf));
+			strlcpy(expbuf, bookname, sizeof (expbuf));
 			expand = &target;
 		} else {
 			assert(0);
 		}
 		if (expand != NULL) {
 			*strpbrk(expbuf, "@#") = '\0'; /* dataset name in buf */
-			(void) strlcat(expbuf, *expand, sizeof(expbuf));
+			(void) strlcat(expbuf, *expand, sizeof (expbuf));
 			*expand = expbuf;
 		}
 	}
 
 	/* determine target type */
-	switch(*strpbrk(target, "@#")) {
+	switch (*strpbrk(target, "@#")) {
 		case '@': target_type = ZFS_TYPE_SNAPSHOT; break;
 		case '#': target_type = ZFS_TYPE_BOOKMARK; break;
 		default: abort();
