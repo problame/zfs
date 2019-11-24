@@ -432,16 +432,16 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 	int error;
 	zfs_bookmark_phys_t bmark_phys = { 0 };
 
-	/* Verify that new and target bookmark strings pass bookmark namecheck */
+	/* Verify new and target bookmark strings pass bookmark namecheck */
 	{
 		char *target;
 		if (bookmark_namecheck(nvpair_name(pair), NULL, NULL) != 0)
-			return SET_ERROR(EINVAL);
+			return (SET_ERROR(EINVAL));
 		target = fnvpair_value_string(pair);
 		if (target == NULL)
-			return SET_ERROR(EINVAL);
+			return (SET_ERROR(EINVAL));
 		if (bookmark_namecheck(target, NULL, NULL) != 0)
-			return SET_ERROR(EINVAL);
+			return (SET_ERROR(EINVAL));
 	}
 
 	/* Verify that new and target bookmark are on the same dataset */
@@ -460,12 +460,12 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 
 		target_pound = strchr(target, '#');
 		ASSERT(target_pound != NULL);
-		target_ds_len = target_pound - target;;
+		target_ds_len = target_pound - target;
 
 		if (new_ds_len != target_ds_len)
-			return SET_ERROR(EINVAL);
+			return (SET_ERROR(EINVAL));
 		if (strncmp(new, target, new_ds_len) != 0)
-			return SET_ERROR(EINVAL);
+			return (SET_ERROR(EINVAL));
 	}
 
 	/* Verify that the new bookmark does not already exist */
@@ -481,7 +481,8 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 	}
 
 	/* Verify that the target bookmark exists */
-	error = dsl_bookmark_lookup(dp, fnvpair_value_string(pair), NULL, &bmark_phys);
+	error = dsl_bookmark_lookup(dp, fnvpair_value_string(pair),
+	    NULL, &bmark_phys);
 	if (error != 0) {
 		return (SET_ERROR(error));
 	}
@@ -511,7 +512,8 @@ dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
 
 		error = dsl_bookmark_clone_check_impl(pair,  tx);
 		if (error != 0) {
-			fnvlist_add_int32(dbcc->dbcc_errors, nvpair_name(pair), error);
+			fnvlist_add_int32(dbcc->dbcc_errors, nvpair_name(pair),
+			    error);
 			rv = error;
 		}
 	}
@@ -538,9 +540,10 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	// TODO assert bmark_fs_target's filesystem is the same as bmark_fs_new's filesystem
 
 	/* make the copy */
-	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_target, target_shortname, &target_phys));
+	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_target, target_shortname,
+	    &target_phys));
 	dsl_bookmark_node_t *new_dbn = dsl_bookmark_node_alloc(new_shortname);
-	memcpy(&new_dbn->dbn_phys, &target_phys, sizeof(target_phys));
+	memcpy(&new_dbn->dbn_phys, &target_phys, sizeof (target_phys));
 	target_redacted = new_dbn->dbn_phys.zbm_redaction_obj != 0;
 	if (target_redacted) {
 		// TODO copy zbm_redaction_obj and adjust new_dbn->dbn_phys.zbm_redaction_obj
@@ -554,7 +557,7 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	if (target_redacted) {
 		spa_feature_incr(dp->dp_spa,
 		    SPA_FEATURE_REDACTION_BOOKMARKS, tx);
-		/* SPA_FEATURE_BOOKMARK_V2 is incremented by dsl_bookmark_node_add */
+		/* SPA_FEATURE_BOOKMARK_V2 inc'ed in dsl_bookmark_node_add */
 	}
 
 	dsl_bookmark_node_add(bmark_fs_new, new_dbn, tx);
@@ -562,8 +565,7 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	spa_history_log_internal_ds(bmark_fs_target, "bookmark_clone", tx,
 	    "name=%s creation_txg=%llu target_guid=%llu",
 	    new_shortname, (longlong_t)new_dbn->dbn_phys.zbm_creation_txg,
-	    (longlong_t)target_phys.zbm_guid
-	);
+	    (longlong_t)target_phys.zbm_guid);
 
 	dsl_dataset_rele(bmark_fs_target, FTAG);
 	dsl_dataset_rele(bmark_fs_new, FTAG);
