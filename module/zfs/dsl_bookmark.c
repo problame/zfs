@@ -546,6 +546,8 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	target_redacted = new_dbn->dbn_phys.zbm_redaction_obj != 0;
 	if (target_redacted) {
 		// TODO copy zbm_redaction_obj and adjust new_dbn->dbn_phys.zbm_redaction_obj
+		// or use reference counting (the redaction object should be immutable if the
+		// bookmark exists, right?)
 	}
 
 	/* update feature flags */
