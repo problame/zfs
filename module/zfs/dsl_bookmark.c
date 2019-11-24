@@ -432,6 +432,42 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 	int error;
 	zfs_bookmark_phys_t bmark_phys = { 0 };
 
+	/* Verify that new and target bookmark strings pass bookmark namecheck */
+	{
+		char *target;
+		if (bookmark_namecheck(nvpair_name(pair), NULL, NULL) != 0)
+			return SET_ERROR(EINVAL);
+		target = fnvpair_value_string(pair);
+		if (target == NULL)
+			return SET_ERROR(EINVAL);
+		if (bookmark_namecheck(target, NULL, NULL) != 0)
+			return SET_ERROR(EINVAL);
+	}
+
+	/* Verify that new and target bookmark are on the same dataset */
+	{
+		char *new, *target;
+		char *new_pound, *target_pound;
+		size_t new_ds_len, target_ds_len;
+
+		new = nvpair_name(pair);
+		target = fnvpair_value_string(pair);
+		ASSERT(target != NULL);
+
+		new_pound = strchr(new, '#');
+		ASSERT(new_pound != NULL);
+		new_ds_len = new_pound - nvpair_name(pair);
+
+		target_pound = strchr(target, '#');
+		ASSERT(target_pound != NULL);
+		target_ds_len = target_pound - target;;
+
+		if (new_ds_len != target_ds_len)
+			return SET_ERROR(EINVAL);
+		if (strncmp(new, target, new_ds_len) != 0)
+			return SET_ERROR(EINVAL);
+	}
+
 	/* Verify that the new bookmark does not already exist */
 	error = dsl_bookmark_lookup(dp, nvpair_name(pair), NULL, &bmark_phys);
 	switch (error) {
