@@ -523,8 +523,7 @@ dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
 
 static void
 dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
-    dmu_tx_t *tx, uint64_t num_redact_snaps, uint64_t *redact_snaps, void *tag,
-    redaction_list_t **redaction_list)
+    dmu_tx_t *tx)
 {
 	dsl_pool_t *dp = dmu_tx_pool(tx);
 	dsl_dataset_t *bmark_fs_target, *bmark_fs_new;
@@ -582,7 +581,7 @@ dsl_bookmark_clone_sync(void *arg, dmu_tx_t *tx)
 	for (nvpair_t *pair = nvlist_next_nvpair(dbcc->dbcc_bmarks, NULL);
 	    pair != NULL; pair = nvlist_next_nvpair(dbcc->dbcc_bmarks, pair)) {
 		dsl_bookmark_clone_sync_impl(nvpair_name(pair),
-		    fnvpair_value_string(pair), tx, 0, NULL, NULL, NULL);
+		    fnvpair_value_string(pair), tx);
 	}
 }
 
