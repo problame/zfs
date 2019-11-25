@@ -504,6 +504,9 @@ dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
 {
 	dprintf("dsl_bookmark_clone_check began\n");
 	dsl_bookmark_clone_arg_t *dbcc = arg;
+	ASSERT3P(dbcc, !=, NULL);
+	ASSERT3P(dbcc->dbcc_bmarks, !=, NULL);
+
 	dsl_pool_t *dp = dmu_tx_pool(tx);
 	int rv = 0;
 
@@ -521,9 +524,10 @@ dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
 
 		error = dsl_bookmark_clone_check_impl(pair,  tx);
 		if (error != 0) {
-			fnvlist_add_int32(dbcc->dbcc_errors, nvpair_name(pair),
-			    error);
 			rv = error;
+			if (dbcc->dbcc_errors != NULL)
+				fnvlist_add_int32(dbcc->dbcc_errors,
+				    nvpair_name(pair), error);
 		}
 	}
 
