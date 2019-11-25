@@ -275,6 +275,63 @@ zcp_synctask_snapshot(lua_State *state, boolean_t sync, nvlist_t *err_details)
 	return (err);
 }
 
+static int zcp_synctask_bookmark(lua_State *, boolean_t, nvlist_t *);
+static zcp_synctask_info_t zcp_synctask_bookmark_info = {
+	.name = "bookmark",
+	.func = zcp_synctask_bookmark,
+	.pargs = {
+	    {.za_name = "snapshot | bookmark", .za_lua_type = LUA_TSTRING},
+	    {.za_name = "bookmark", .za_lua_type = LUA_TSTRING},
+	    {NULL, 0}
+	},
+	.kwargs = {
+	    {NULL, 0}
+	},
+	.space_check = ZFS_SPACE_CHECK_NORMAL, // TODO sensible?
+	.blocks_modified = 23, // TODO
+};
+
+/* ARGSUSED */
+static int
+zcp_synctask_bookmark(lua_State *state, boolean_t sync, nvlist_t *err_details)
+{
+	int err;
+	const char *target = lua_tostring(state, 1);
+	const char *new = lua_tostring(state, 2);
+
+	nvlist_t *bmarks = fnvlist_alloc();
+	fnvlist_add_string(bmarks, new, target);
+
+	zcp_cleanup_handler_t *zch = zcp_register_cleanup(state,
+	    (zcp_cleanup_t *)&fnvlist_free, bmarks);
+
+	if (strrchr(target, '@') != NULL) {
+		dsl_bookmark_create_arg_t dbca = {
+			.dbca_bmarks = bmarks,
+			.dbca_errors = NULL,
+		};
+		err = zcp_sync_task(state, dsl_bookmark_create_check,
+		    dsl_bookmark_create_sync, &dbca,
+		    sync, target);
+	} else if (strrchr(target, '#') != NULL) {
+		dsl_bookmark_clone_arg_t dbcc = {
+			.dbcc_bmarks = bmarks,
+			.dbcc_errors = NULL,
+		};
+		err = zcp_sync_task(state, dsl_bookmark_clone_check,
+		    dsl_bookmark_clone_sync, &dbcc,
+		    sync, target);
+	} else {
+		err = 1;
+	}
+
+	zcp_deregister_cleanup(state, zch);
+	fnvlist_free(bmarks);
+
+	return (err);
+}
+
+
 static int
 zcp_synctask_wrapper(lua_State *state)
 {
@@ -343,6 +400,7 @@ zcp_load_synctask_lib(lua_State *state, boolean_t sync)
 		&zcp_synctask_promote_info,
 		&zcp_synctask_rollback_info,
 		&zcp_synctask_snapshot_info,
+		&zcp_synctask_bookmark_info,
 		NULL
 	};
 

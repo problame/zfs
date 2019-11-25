@@ -158,20 +158,6 @@ dsl_bookmark_nvl_check_same_pool(nvlist_t *bmarks)
 	return (0);
 }
 
-typedef struct dsl_bookmark_create_redacted_arg {
-	const char	*dbcra_bmark;
-	const char	*dbcra_snap;
-	redaction_list_t **dbcra_rl;
-	uint64_t	dbcra_numsnaps;
-	uint64_t	*dbcra_snaps;
-	void		*dbcra_tag;
-} dsl_bookmark_create_redacted_arg_t;
-
-typedef struct dsl_bookmark_create_arg {
-	nvlist_t *dbca_bmarks;
-	nvlist_t *dbca_errors;
-} dsl_bookmark_create_arg_t;
-
 static int
 dsl_bookmark_create_check_impl(dsl_dataset_t *snapds, const char *bookmark_name,
     dmu_tx_t *tx)
@@ -205,7 +191,7 @@ dsl_bookmark_create_check_impl(dsl_dataset_t *snapds, const char *bookmark_name,
 	return (error);
 }
 
-static int
+int
 dsl_bookmark_create_check(void *arg, dmu_tx_t *tx)
 {
 	dsl_bookmark_create_arg_t *dbca = arg;
@@ -430,7 +416,7 @@ dsl_bookmark_create_sync_impl(const char *bookmark, const char *snapshot,
 	dsl_dataset_rele(snapds, FTAG);
 }
 
-static void
+void
 dsl_bookmark_create_sync(void *arg, dmu_tx_t *tx)
 {
 	dsl_bookmark_create_arg_t *dbca = arg;
@@ -468,11 +454,6 @@ dsl_bookmark_create(nvlist_t *bmarks, nvlist_t *errors)
 	    dsl_bookmark_create_sync, &dbca,
 	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL));
 }
-
-typedef struct dsl_bookmark_clone_arg {
-	nvlist_t *dbcc_bmarks;
-	nvlist_t *dbcc_errors;
-} dsl_bookmark_clone_arg_t;
 
 static int
 dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
@@ -544,7 +525,7 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 	return (0);
 }
 
-static int
+int
 dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
 {
 	dprintf("dsl_bookmark_clone_check began\n");
@@ -630,7 +611,7 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	dsl_dataset_rele(bmark_fs_new, FTAG);
 }
 
-static void
+void
 dsl_bookmark_clone_sync(void *arg, dmu_tx_t *tx)
 {
 	dsl_bookmark_clone_arg_t *dbcc = arg;
@@ -666,7 +647,7 @@ dsl_bookmark_clone(nvlist_t *bmarks, nvlist_t *errors)
 
 	return (dsl_sync_task(nvpair_name(pair), dsl_bookmark_clone_check,
 	    dsl_bookmark_clone_sync, &dbcc,
-	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL));
+	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL)); // TODO SPACE CHECK OK?
 }
 
 static int
