@@ -536,7 +536,7 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 	VERIFY0(dsl_bookmark_hold_ds(dp, new_name, &bmark_fs_new, FTAG,
 	    &new_shortname));
 	/* Bookmarks must be on the same dataset */
-	VERIFY3U(bmark_fs_target->ds_objset, ==, bmark_fs_new->ds_objset);
+	VERIFY3U(bmark_fs_target->ds_object, ==, bmark_fs_new->ds_object);
 
 	/* make the copy */
 	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_target, target_shortname,
