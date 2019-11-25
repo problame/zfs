@@ -116,6 +116,48 @@ dsl_bookmark_lookup(dsl_pool_t *dp, const char *fullname,
 	return (error);
 }
 
+/*
+ * Given a list of (bookmarkname, _), check that all bookmarks are
+ * in the same pool.
+ *
+ * Note that this does not check for existence of the pool.
+ *
+ * Returns 0 if all bookmarks are in the same pool.
+ * Returns -1 if bookmarks are in different pools or any of the bookmarks
+ *            does not pass bookmark_namecheck;
+ */
+static int
+dsl_bookmark_nvl_check_same_pool(nvlist_t *bmarks)
+{
+	char *first;
+	size_t first_len;
+
+	first = NULL;
+	for (nvpair_t *pair = nvlist_next_nvpair(bmarks, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(bmarks, pair)) {
+
+		char *bmark = nvpair_name(pair);
+
+		if (bookmark_namecheck(bmark, NULL, NULL) != 0)
+			return (-1);
+
+		if (first == NULL) {
+			char *cp = strpbrk(bmark, "/#");
+			if (cp == NULL)
+				return (-1);
+			first = bmark;
+			first_len = cp - bmark;
+		}
+
+		if (strncmp(first, bmark, first_len) != 0)
+			return (-1);
+
+		if (*(bmark + first_len) != '/')
+			return (-1);
+	}
+	return (0);
+}
+
 typedef struct dsl_bookmark_create_redacted_arg {
 	const char	*dbcra_bmark;
 	const char	*dbcra_snap;
@@ -412,6 +454,9 @@ dsl_bookmark_create(nvlist_t *bmarks, nvlist_t *errors)
 	nvpair_t *pair;
 	dsl_bookmark_create_arg_t dbca;
 
+	if (dsl_bookmark_nvl_check_same_pool(bmarks) != 0)
+		return (EINVAL);
+
 	pair = nvlist_next_nvpair(bmarks, NULL);
 	if (pair == NULL)
 		return (0);
@@ -608,6 +653,9 @@ dsl_bookmark_clone(nvlist_t *bmarks, nvlist_t *errors)
 {
 	nvpair_t *pair;
 	dsl_bookmark_clone_arg_t dbcc;
+
+	if (dsl_bookmark_nvl_check_same_pool(bmarks) != 0)
+		return (EINVAL);
 
 	pair = nvlist_next_nvpair(bmarks, NULL);
 	if (pair == NULL)
@@ -1162,7 +1210,12 @@ dsl_bookmark_destroy(nvlist_t *bmarks, nvlist_t *errors)
 {
 	int rv;
 	dsl_bookmark_destroy_arg_t dbda;
-	nvpair_t *pair = nvlist_next_nvpair(bmarks, NULL);
+	nvpair_t *pair;
+
+	if (dsl_bookmark_nvl_check_same_pool(bmarks) != 0)
+		return (EINVAL);
+
+	pair = nvlist_next_nvpair(bmarks, NULL);
 	if (pair == NULL)
 		return (0);
 
