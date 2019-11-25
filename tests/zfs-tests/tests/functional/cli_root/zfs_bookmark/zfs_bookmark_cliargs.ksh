@@ -69,6 +69,7 @@ log_onexit cleanup
 
 DATASET="$TESTPOOL/$TESTFS"
 TESTSNAP='snapshot'
+TESTSNAP2='snapshot2'
 TESTBM='bookmark'
 TESTBMCOPY='bookmark_copy'
 
@@ -157,13 +158,44 @@ log_mustnot zfs bookmark "#"        ""
 log_mustnot zfs bookmark ""         "#"
 log_mustnot zfs bookmark ""         ""
 
-# Verify we cannot copy a bookmark if the new bookmark already exists
-log_mustnot zfs bookmark "$DATASET#$TESTBM" "$DATASET#$TESTBM"
+# Verify that copied 'normal' bookmarks are independent of the original bookmark
+log_must zfs bookmark "$DATASET#$TESTBM" "$DATASET#$TESTBMCOPY"
+log_must zfs destroy "$DATASET#$TESTBM"
+log_must eval "zfs send $DATASET@$TESTSNAP > $TEST_BASE_DIR/zfstest_datastream.$$"
+log_must eval "destroy_dataset $TESTPOOL/$TESTFS/recv"
+log_must eval "zfs recv -o mountpoint=none $TESTPOOL/$TESTFS/recv < $TEST_BASE_DIR/zfstest_datastream.$$"
+log_must zfs snapshot "$DATASET@$TESTSNAP2"
+log_must eval "zfs send -i \#$TESTBMCOPY $DATASET@$TESTSNAP2 > $TEST_BASE_DIR/zfstest_datastream.$$"
+log_must eval "zfs recv $TESTPOOL/$TESTFS/recv < $TEST_BASE_DIR/zfstest_datastream.$$"
+# cleanup
+log_must eval "destroy_dataset $DATASET@$TESTSNAP2"
+log_must zfs destroy "$DATASET#$TESTBMCOPY"
+log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
 
-# Verify that copying a bookmark only works if new and target name
-# have the same dataset
-log_must eval "datasetexists $TESTPOOL/$TESTFS/child"
-log_mustnot zfs bookmark "$TESTPOOL/$TESTFS#$TESTBM" "$TESTPOOL/$TESTFS/child#$TESTBM"
-log_mustnot zfs bookmark "$TESTPOOL/$TESTFS#$TESTBM" "$TESTPOOL/${TESTFS}_with_suffix#$TESTBM"
+# Verify that copied redaction bookmarks are independent of the original bookmark
+## create redaction bookmark
+log_must zfs destroy "$DATASET#$TESTBM"
+log_must zfs destroy "$DATASET@$TESTSNAP"
+log_must eval "echo secret > $TESTDIR/secret"
+log_must zfs snapshot "$DATASET@$TESTSNAP"
+log_must eval "echo redacted > $TESTDIR/secret"
+log_must zfs snapshot "$DATASET@$TESTSNAP2" # TESTSNAP2 is the redaction snapshot
+log_must zfs list -t all -o name,createtxg,guid,mountpoint,written
+log_must zfs redact "$DATASET@$TESTSNAP" "$TESTBM" "$DATASET@$TESTSNAP2"
+## copy the redaction bookmark, destroy original
+log_must zfs bookmark "$DATASET#$TESTBM" "#$TESTBMCOPY"
+log_must zfs destroy "$DATASET#$TESTBM"
+log_must eval 'echo foo | grep bar'
+## try to use the copy
+log_must eval "zfs send --redact "$TESTBM" $DATASET@$TESTSNAP > $TEST_BASE_DIR/zfstest_datastream.$$"
+log_must eval "destroy_dataset $TESTPOOL/$TESTFS/recv"
+log_must eval "zfs recv -o mountpoint=none $TESTPOOL/$TESTFS/recv < $TEST_BASE_DIR/zfstest_datastream.$$"
+log_must eval "zfs send -i @$TESTSNAP $DATASET@$TESTSNAP2 > $TEST_BASE_DIR/zfstest_datastream.$$"
+log_must eval "zfs recv $TESTPOOL/$TESTFS/recv < $TEST_BASE_DIR/zfstest_datastream.$$"
+## cleanup
+log_must eval "destroy_dataset $DATASET@$TESTSNAP2"
+log_must zfs destroy "$DATASET#$TESTBMCOPY"
+log_must zfs snapshot "$DATASET@$TESTSNAP"
+log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
 
 log_pass "'zfs bookmark' works as expected only when passed valid arguments."

@@ -31,4 +31,5 @@ DISK=${DISKS%% *}
 default_setup_noexit $DISK
 log_must zfs create "$TESTPOOL/$TESTFS/child"
 log_must zfs create "$TESTPOOL/${TESTFS}_with_suffix"
+log_must zfs create "$TESTPOOL/$TESTFS/recv"
 log_pass

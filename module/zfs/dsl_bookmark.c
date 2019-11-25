@@ -487,6 +487,11 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 		return (SET_ERROR(error));
 	}
 
+	/* We only support bookmarks without redaction lists */
+	if (bmark_phys.zbm_redaction_obj != 0) {
+		return (SET_ERROR(EINVAL));
+	}
+
 	return (0);
 }
 
