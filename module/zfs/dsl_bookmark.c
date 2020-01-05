@@ -585,9 +585,26 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *source_name,
 	memcpy(&new_dbn->dbn_phys, &source_phys, sizeof (source_phys));
 	source_redacted = new_dbn->dbn_phys.zbm_redaction_obj != 0;
 	if (source_redacted) {
-		// TODO copy zbm_redaction_obj and adjust new_dbn->dbn_phys.zbm_redaction_obj
-		// or use reference counting (the redaction object should be immutable if the
-		// bookmark exists, right?)
+	/*
+	 *  FIXME: Design Decision. Options:
+	 *  A) copy zbm_redaction_obj and adjust
+	 *     new_dbn->dbn_phys.zbm_redaction_obj
+	 *  B) use reference counting on zbm_redaction_obj, under
+	 *     the assumption that the redaction object is immutable
+	 *     if the redaction process has completed (correct?)
+	 *  C) Do not support copying redaction bookmarks for now
+	 *  D) Cloning a redaction bookmark means creating a
+	 *     `v1-style bookmark`, i.e. a bookmark with
+	 *      zbm_redaction_obj=0.
+	 *     This might be arguable if the user expectation is that the
+	 *     `zfs bookmark` subcommand only creates v1-style bookmarks.
+	 *      `zfs bookmark fs#redactionbookmark fs#newbookmark`
+	 *  This FIXME must be addressed before merge because falling
+	 *  through here means that the new bookmark will contain the
+	 *  redaction object id, but without a mechanism to keep track
+	 *  of this additional reference. A corresponding test case
+	 *  ensures that we address this issue before merge.
+	 */
 	}
 
 	/* update feature flags */
@@ -646,9 +663,10 @@ dsl_bookmark_clone(nvlist_t *bmarks, nvlist_t *errors)
 	dbcc.dbcc_bmarks = bmarks;
 	dbcc.dbcc_errors = errors;
 
+	// TODO review space check arg, no idea what it means
 	return (dsl_sync_task(nvpair_name(pair), dsl_bookmark_clone_check,
 	    dsl_bookmark_clone_sync, &dbcc,
-	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL)); // TODO SPACE CHECK OK?
+	    fnvlist_num_pairs(bmarks), ZFS_SPACE_CHECK_NORMAL));
 }
 
 static int
