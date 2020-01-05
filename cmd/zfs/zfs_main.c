@@ -30,6 +30,7 @@
  * Copyright (c) 2019 Datto Inc.
  * Copyright (c) 2019, loli10K <ezomori.nozomu@gmail.com>
  * Copyright 2019 Joyent, Inc.
+ * Copyright (c) 2019, 2020 by Christian Schwarz. All rights reserved.
  */
 
 #include <assert.h>

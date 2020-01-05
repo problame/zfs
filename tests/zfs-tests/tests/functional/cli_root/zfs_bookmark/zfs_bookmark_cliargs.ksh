@@ -22,6 +22,7 @@
 
 #
 # Copyright 2017, loli10K <ezomori.nozomu@gmail.com>. All rights reserved.
+# Copyright 2019, 2020 by Christian Schwarz. All rights reserved.
 #
 
 . $STF_SUITE/include/libtest.shlib

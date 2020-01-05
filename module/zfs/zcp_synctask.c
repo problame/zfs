@@ -15,6 +15,7 @@
 
 /*
  * Copyright (c) 2016, 2017 by Delphix. All rights reserved.
+ * Copyright (c) 2019, 2020 by Christian Schwarz. All rights reserved.
  */
 
 #include <sys/lua/lua.h>

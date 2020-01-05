@@ -10,7 +10,7 @@
 --
 
 --
--- Copyright (c) 2019 by Christian Schwarz. All rights reserved.
+-- Copyright (c) 2019, 2020 by Christian Schwarz. All rights reserved.
 --
 
 -- This program should be invoked as "zfs program <pool> <prog> <fs> <snap> <book>"

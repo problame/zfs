@@ -16,6 +16,7 @@
 /*
  * Copyright (c) 2013, 2018 by Delphix. All rights reserved.
  * Copyright 2017 Nexenta Systems, Inc.
+ * Copyright 2019, 2020 by Christian Schwarz. All rights reserved.
  */
 
 #include <sys/zfs_context.h>
