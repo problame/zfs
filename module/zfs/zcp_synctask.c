@@ -296,31 +296,31 @@ static int
 zcp_synctask_bookmark(lua_State *state, boolean_t sync, nvlist_t *err_details)
 {
 	int err;
-	const char *target = lua_tostring(state, 1);
+	const char *source = lua_tostring(state, 1);
 	const char *new = lua_tostring(state, 2);
 
 	nvlist_t *bmarks = fnvlist_alloc();
-	fnvlist_add_string(bmarks, new, target);
+	fnvlist_add_string(bmarks, new, source);
 
 	zcp_cleanup_handler_t *zch = zcp_register_cleanup(state,
 	    (zcp_cleanup_t *)&fnvlist_free, bmarks);
 
-	if (strrchr(target, '@') != NULL) {
+	if (strrchr(source, '@') != NULL) {
 		dsl_bookmark_create_arg_t dbca = {
 			.dbca_bmarks = bmarks,
 			.dbca_errors = NULL,
 		};
 		err = zcp_sync_task(state, dsl_bookmark_create_check,
 		    dsl_bookmark_create_sync, &dbca,
-		    sync, target);
-	} else if (strrchr(target, '#') != NULL) {
+		    sync, source);
+	} else if (strrchr(source, '#') != NULL) {
 		dsl_bookmark_clone_arg_t dbcc = {
 			.dbcc_bmarks = bmarks,
 			.dbcc_errors = NULL,
 		};
 		err = zcp_sync_task(state, dsl_bookmark_clone_check,
 		    dsl_bookmark_clone_sync, &dbcc,
-		    sync, target);
+		    sync, source);
 	} else {
 		err = 1;
 	}

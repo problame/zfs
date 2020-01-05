@@ -1160,14 +1160,14 @@ lzc_bookmark(nvlist_t *bookmarks, nvlist_t **errlist)
  * Clones existing bookmarks.
  *
  * The bookmarks nvlist maps from the full name of the new bookmark to
- * the full name of the target bookmark. All of the bookmarks
+ * the full name of the source bookmark. All of the bookmarks
  * must be in the same pool. The new bookmark names must be unique.
  *
  * The returned results nvlist will have an entry for each bookmark that failed.
  * The value will be the (int32) error code.
  *
  * The return value will be 0 if all bookmarks were created, otherwise it will
- * be the errno of a (undetermined) bookmarks that failed.
+ * be the errno of an (undetermined) bookmark that failed.
  */
 int
 lzc_bookmark_clone(nvlist_t *bookmarks, nvlist_t **errlist)

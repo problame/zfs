@@ -3686,7 +3686,7 @@ zfs_ioc_bookmark(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
  * All bookmarks must be in the same pool.
  *
  * innvl: {
- *     new_bookmark1 -> target_bm1, new_bookmark2 -> target_bm2
+ *     new_bookmark1 -> source_bm1, new_bookmark2 -> source_bm2
  * }
  *
  * outnvl: bookmark -> error code (int32)
@@ -3702,12 +3702,12 @@ zfs_ioc_bookmark_clone(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 {
 	for (nvpair_t *pair = nvlist_next_nvpair(innvl, NULL);
 	    pair != NULL; pair = nvlist_next_nvpair(innvl, pair)) {
-		char *target_bmark;
+		char *source_bmark;
 
 		/*
-		 * Verify that the target is a string.
+		 * Verify that the source is a string.
 		 */
-		if (nvpair_value_string(pair, &target_bmark) != 0)
+		if (nvpair_value_string(pair, &source_bmark) != 0)
 			return (SET_ERROR(EINVAL));
 
 

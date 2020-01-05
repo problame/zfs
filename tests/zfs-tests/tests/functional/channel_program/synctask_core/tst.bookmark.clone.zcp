@@ -13,14 +13,14 @@
 -- Copyright (c) 2019 by Christian Schwarz. All rights reserved.
 --
 
--- This program should be invoked as "zfs program <pool> <prog> <fs> <target_book> <new_book>"
+-- This program should be invoked as "zfs program <pool> <prog> <fs> <source_book> <new_book>"
 
 args = ...
 argv = args["argv"]
 fs = argv[1]
-target = fs .. "#" .. argv[2]
+source = fs .. "#" .. argv[2]
 new = fs .. "#" .. argv[3]
-assert(zfs.sync.bookmark(target, new) == 0)
+assert(zfs.sync.bookmark(source, new) == 0)
 books = {}
 count = 0
 for s in zfs.list.bookmarks(fs) do
@@ -28,5 +28,5 @@ for s in zfs.list.bookmarks(fs) do
 	books[s] = 1
 end
 assert(count == 2)
-assert(books[target] == 1)
+assert(books[source] == 1)
 assert(books[new] == 1)

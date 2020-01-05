@@ -39,13 +39,13 @@
 # 5. Verify at least a full dataset path is required and both snapshot and
 #    bookmark name must be valid
 #
-# 6. Verify we can copy a bookmark by specifying the target bookmark and new
+# 6. Verify we can copy a bookmark by specifying the source bookmark and new
 #    bookmark full paths.
-# 7. Verify we can copy a bookmark specifying the short target name
+# 7. Verify we can copy a bookmark specifying the short source name
 # 8. Verify we can copy a bookmark specifying the short new name
 # 9. Verify two short paths are not allowed, and test empty paths
 # 10. Verify we cannot copy a bookmark if the new bookmark already exists
-# 11. Verify that copying a bookmark only works if new and target name
+# 11. Verify that copying a bookmark only works if new and source name
 #     have the same dataset
 #
 
@@ -121,10 +121,10 @@ log_mustnot eval "bkmarkexists $DATASET#$TESTBM"
 # Bookmark copying tests
 #
 
-# create the target bookmark
+# create the source bookmark
 log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
 
-# Verify we can copy a bookmark by specifying the target bookmark
+# Verify we can copy a bookmark by specifying the source bookmark
 # and new bookmark full paths.
 log_must eval "bkmarkexists $DATASET#$TESTBM"
 log_must zfs bookmark "$DATASET#$TESTBM" "$DATASET#$TESTBMCOPY"
@@ -136,10 +136,10 @@ log_must eval "bkmarkexists $DATASET#$TESTBMCOPY"
 log_must zfs destroy "$DATASET#$TESTBMCOPY"
 log_mustnot eval "bkmarkexists $DATASET#$TESTBMCOPY"
 log_mustnot eval "bkmarkexists $DATASET#$TESTBM"
-## recreate the target bookmark
+## recreate the source bookmark
 log_must zfs bookmark "$DATASET@$TESTSNAP" "$DATASET#$TESTBM"
 
-# Verify we can copy a bookmark specifying the short target name
+# Verify we can copy a bookmark specifying the short source name
 log_must zfs bookmark "#$TESTBM" "$DATASET#$TESTBMCOPY"
 log_must eval "bkmarkexists $DATASET#$TESTBMCOPY"
 log_must zfs destroy "$DATASET#$TESTBMCOPY"

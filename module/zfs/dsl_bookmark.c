@@ -462,39 +462,39 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 	int error;
 	zfs_bookmark_phys_t bmark_phys = { 0 };
 
-	/* Verify new and target bookmark strings pass bookmark namecheck */
+	/* Verify new and source bookmark strings pass bookmark namecheck */
 	{
-		char *target;
+		char *source;
 		if (bookmark_namecheck(nvpair_name(pair), NULL, NULL) != 0)
 			return (SET_ERROR(EINVAL));
-		target = fnvpair_value_string(pair);
-		if (target == NULL)
+		source = fnvpair_value_string(pair);
+		if (source == NULL)
 			return (SET_ERROR(EINVAL));
-		if (bookmark_namecheck(target, NULL, NULL) != 0)
+		if (bookmark_namecheck(source, NULL, NULL) != 0)
 			return (SET_ERROR(EINVAL));
 	}
 
-	/* Verify that new and target bookmark are on the same dataset */
+	/* Verify that new and source bookmark are on the same dataset */
 	{
-		char *new, *target;
-		char *new_pound, *target_pound;
-		size_t new_ds_len, target_ds_len;
+		char *new, *source;
+		char *new_pound, *source_pound;
+		size_t new_ds_len, source_ds_len;
 
 		new = nvpair_name(pair);
-		target = fnvpair_value_string(pair);
-		ASSERT(target != NULL);
+		source = fnvpair_value_string(pair);
+		ASSERT(source != NULL);
 
 		new_pound = strchr(new, '#');
 		ASSERT(new_pound != NULL);
 		new_ds_len = new_pound - nvpair_name(pair);
 
-		target_pound = strchr(target, '#');
-		ASSERT(target_pound != NULL);
-		target_ds_len = target_pound - target;
+		source_pound = strchr(source, '#');
+		ASSERT(source_pound != NULL);
+		source_ds_len = source_pound - source;
 
-		if (new_ds_len != target_ds_len)
+		if (new_ds_len != source_ds_len)
 			return (SET_ERROR(EINVAL));
-		if (strncmp(new, target, new_ds_len) != 0)
+		if (strncmp(new, source, new_ds_len) != 0)
 			return (SET_ERROR(EINVAL));
 	}
 
@@ -510,7 +510,7 @@ dsl_bookmark_clone_check_impl(nvpair_t *pair, dmu_tx_t *tx)
 		return (SET_ERROR(error));
 	}
 
-	/* Verify that the target bookmark exists */
+	/* Verify that the source bookmark exists */
 	error = dsl_bookmark_lookup(dp, fnvpair_value_string(pair),
 	    NULL, &bmark_phys);
 	if (error != 0) {
@@ -561,29 +561,29 @@ dsl_bookmark_clone_check(void *arg, dmu_tx_t *tx)
 }
 
 static void
-dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
+dsl_bookmark_clone_sync_impl(const char *new_name, const char *source_name,
     dmu_tx_t *tx)
 {
 	dsl_pool_t *dp = dmu_tx_pool(tx);
-	dsl_dataset_t *bmark_fs_target, *bmark_fs_new;
-	char *target_shortname, *new_shortname;
-	zfs_bookmark_phys_t target_phys;
-	boolean_t target_redacted;
+	dsl_dataset_t *bmark_fs_source, *bmark_fs_new;
+	char *source_shortname, *new_shortname;
+	zfs_bookmark_phys_t source_phys;
+	boolean_t source_redacted;
 
-	VERIFY0(dsl_bookmark_hold_ds(dp, target_name, &bmark_fs_target, FTAG,
-	    &target_shortname));
+	VERIFY0(dsl_bookmark_hold_ds(dp, source_name, &bmark_fs_source, FTAG,
+	    &source_shortname));
 	VERIFY0(dsl_bookmark_hold_ds(dp, new_name, &bmark_fs_new, FTAG,
 	    &new_shortname));
 	/* Bookmarks must be on the same dataset */
-	VERIFY3U(bmark_fs_target->ds_object, ==, bmark_fs_new->ds_object);
+	VERIFY3U(bmark_fs_source->ds_object, ==, bmark_fs_new->ds_object);
 
 	/* make the copy */
-	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_target, target_shortname,
-	    &target_phys));
+	VERIFY0(dsl_bookmark_lookup_impl(bmark_fs_source, source_shortname,
+	    &source_phys));
 	dsl_bookmark_node_t *new_dbn = dsl_bookmark_node_alloc(new_shortname);
-	memcpy(&new_dbn->dbn_phys, &target_phys, sizeof (target_phys));
-	target_redacted = new_dbn->dbn_phys.zbm_redaction_obj != 0;
-	if (target_redacted) {
+	memcpy(&new_dbn->dbn_phys, &source_phys, sizeof (source_phys));
+	source_redacted = new_dbn->dbn_phys.zbm_redaction_obj != 0;
+	if (source_redacted) {
 		// TODO copy zbm_redaction_obj and adjust new_dbn->dbn_phys.zbm_redaction_obj
 		// or use reference counting (the redaction object should be immutable if the
 		// bookmark exists, right?)
@@ -594,7 +594,7 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 		spa_feature_incr(dp->dp_spa,
 		    SPA_FEATURE_BOOKMARK_WRITTEN, tx);
 	}
-	if (target_redacted) {
+	if (source_redacted) {
 		spa_feature_incr(dp->dp_spa,
 		    SPA_FEATURE_REDACTION_BOOKMARKS, tx);
 		/* SPA_FEATURE_BOOKMARK_V2 inc'ed in dsl_bookmark_node_add */
@@ -602,12 +602,12 @@ dsl_bookmark_clone_sync_impl(const char *new_name, const char *target_name,
 
 	dsl_bookmark_node_add(bmark_fs_new, new_dbn, tx);
 
-	spa_history_log_internal_ds(bmark_fs_target, "bookmark_clone", tx,
-	    "name=%s creation_txg=%llu target_guid=%llu",
+	spa_history_log_internal_ds(bmark_fs_source, "bookmark_clone", tx,
+	    "name=%s creation_txg=%llu source_guid=%llu",
 	    new_shortname, (longlong_t)new_dbn->dbn_phys.zbm_creation_txg,
-	    (longlong_t)target_phys.zbm_guid);
+	    (longlong_t)source_phys.zbm_guid);
 
-	dsl_dataset_rele(bmark_fs_target, FTAG);
+	dsl_dataset_rele(bmark_fs_source, FTAG);
 	dsl_dataset_rele(bmark_fs_new, FTAG);
 }
 

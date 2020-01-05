@@ -192,7 +192,7 @@
 .Fl a | Ar filesystem Ns | Ns Ar mountpoint
 .Nm
 .Cm bookmark
-.Ar snapshot Ns | Ns Ar bookmark bookmark
+.Ar snapshot Ns | Ns Ar bookmark newbookmark
 .Nm
 .Cm send
 .Op Fl DLPRbcehnpvw
@@ -3607,9 +3607,9 @@ The command can also be given a path to a ZFS file system shared on the system.
 .It Xo
 .Nm
 .Cm bookmark
-.Ar snapshot Ns | Ns Ar bookmark bookmark
+.Ar snapshot Ns | Ns Ar bookmark newbookmark
 .Xc
-Creates a bookmark of the given snapshot or copies an existing bookmark.
+Creates a new bookmark of the given snapshot or copies an existing bookmark.
 Bookmarks mark the point in time when the snapshot was created, and can be used
 as the incremental source for a
 .Nm zfs Cm send
