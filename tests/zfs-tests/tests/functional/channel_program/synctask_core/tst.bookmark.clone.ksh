@@ -17,7 +17,7 @@
 . $STF_SUITE/tests/functional/channel_program/channel_common.kshlib
 
 #
-# DESCRIPTION: Make sure basic snapshot functionality works in channel programs
+# DESCRIPTION: Make sure bookmark cloning works in channel programs
 #
 
 verify_runnable "global"
