@@ -178,7 +178,8 @@ typedef enum vdev_alloc_bias {
 	VDEV_BIAS_NONE,
 	VDEV_BIAS_LOG,		/* dedicated to ZIL data (SLOG) */
 	VDEV_BIAS_SPECIAL,	/* dedicated to ddt, metadata, and small blks */
-	VDEV_BIAS_DEDUP		/* dedicated to dedup metadata */
+	VDEV_BIAS_DEDUP,	/* dedicated to dedup metadata */
+	VDEV_BIAS_EXEMPT	/* exempt from metaslab allocation */
 } vdev_alloc_bias_t;
 
 

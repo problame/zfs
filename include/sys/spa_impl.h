@@ -228,6 +228,7 @@ struct spa {
 	metaslab_class_t *spa_log_class;	/* intent log data class */
 	metaslab_class_t *spa_special_class;	/* special allocation class */
 	metaslab_class_t *spa_dedup_class;	/* dedup allocation class */
+	metaslab_class_t *spa_exempt_class;	/* exempt allocation cllass */
 	uint64_t	spa_first_txg;		/* first txg after spa_open() */
 	uint64_t	spa_final_txg;		/* txg of export/destroy */
 	uint64_t	spa_freeze_txg;		/* freeze pool at this txg */

@@ -3675,6 +3675,17 @@ zio_vdev_io_start(zio_t *zio)
 		return (NULL);
 	}
 
+	/*
+	 * Only allow writes to the label space for VDEVs in the 'exempt' class.
+	 */
+	if (vd->vdev_alloc_bias == VDEV_BIAS_EXEMPT) {
+		VERIFY3U(zio->io_size, <=, VDEV_LABEL_START_SIZE);
+		VERIFY3U(zio->io_size, <=, VDEV_LABEL_END_SIZE);
+		uint64_t end = zio->io_offset + zio->io_size;
+		VERIFY(end <= VDEV_LABEL_START_SIZE ||
+		    zio->io_offset >= vd->vdev_psize - VDEV_LABEL_END_SIZE);
+	}
+
 	ASSERT3P(zio->io_logical, !=, zio);
 	if (zio->io_type == ZIO_TYPE_WRITE) {
 		ASSERT(spa->spa_trust_config);

@@ -1238,6 +1238,7 @@ spa_vdev_config_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error, char *tag)
 	ASSERT(metaslab_class_validate(spa_log_class(spa)) == 0);
 	ASSERT(metaslab_class_validate(spa_special_class(spa)) == 0);
 	ASSERT(metaslab_class_validate(spa_dedup_class(spa)) == 0);
+	ASSERT(metaslab_class_validate(spa_exempt_class(spa)) == 0);
 
 	spa_config_exit(spa, SCL_ALL, spa);
 
@@ -1884,6 +1885,12 @@ spa_dedup_class(spa_t *spa)
 	return (spa->spa_dedup_class);
 }
 
+metaslab_class_t *
+spa_exempt_class(spa_t *spa)
+{
+	return (spa->spa_exempt_class);
+}
+
 /*
  * Locate an appropriate allocation class
  */
@@ -2439,6 +2446,7 @@ spa_fini(void)
 boolean_t
 spa_has_slogs(spa_t *spa)
 {
+	/* XXX zil-pmem / spa_exempt_class */
 	return (spa->spa_log_class->mc_groups != 0);
 }
 

@@ -804,6 +804,7 @@ typedef struct zpool_load_policy {
 #define	VDEV_ALLOC_BIAS_LOG		"log"
 #define	VDEV_ALLOC_BIAS_SPECIAL		"special"
 #define	VDEV_ALLOC_BIAS_DEDUP		"dedup"
+#define	VDEV_ALLOC_BIAS_EXEMPT		"exempt"
 
 /* vdev initialize state */
 #define	VDEV_LEAF_ZAP_INITIALIZE_LAST_OFFSET	\

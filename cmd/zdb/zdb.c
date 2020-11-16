@@ -6230,6 +6230,7 @@ dump_block_stats(spa_t *spa)
 	zcb.zcb_totalasize = metaslab_class_get_alloc(spa_normal_class(spa));
 	zcb.zcb_totalasize += metaslab_class_get_alloc(spa_special_class(spa));
 	zcb.zcb_totalasize += metaslab_class_get_alloc(spa_dedup_class(spa));
+	VERIFY0(metaslab_class_get_alloc(spa_exempt_class(spa)));
 	zcb.zcb_start = zcb.zcb_lastprint = gethrtime();
 	err = traverse_pool(spa, 0, flags, zdb_blkptr_cb, &zcb);
 
@@ -6280,6 +6281,7 @@ dump_block_stats(spa_t *spa)
 	    metaslab_class_get_alloc(spa_special_class(spa)) +
 	    metaslab_class_get_alloc(spa_dedup_class(spa)) +
 	    get_unflushed_alloc_space(spa);
+	VERIFY0(metaslab_class_get_alloc(spa_exempt_class(spa)));
 	total_found = tzb->zb_asize - zcb.zcb_dedup_asize +
 	    zcb.zcb_removing_size + zcb.zcb_checkpoint_size;
 

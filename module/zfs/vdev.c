@@ -247,6 +247,8 @@ vdev_derive_alloc_bias(const char *bias)
 		alloc_bias = VDEV_BIAS_SPECIAL;
 	else if (strcmp(bias, VDEV_ALLOC_BIAS_DEDUP) == 0)
 		alloc_bias = VDEV_BIAS_DEDUP;
+	else if (strcmp(bias, VDEV_ALLOC_BIAS_EXEMPT) == 0)
+		alloc_bias = VDEV_BIAS_EXEMPT;
 
 	return (alloc_bias);
 }
@@ -1298,7 +1300,8 @@ vdev_metaslab_group_create(vdev_t *vd)
 			vd->vdev_alloc_bias = VDEV_BIAS_LOG;
 
 		ASSERT3U(vd->vdev_islog, ==,
-		    (vd->vdev_alloc_bias == VDEV_BIAS_LOG));
+		    (vd->vdev_alloc_bias == VDEV_BIAS_LOG) ||
+		    (vd->vdev_alloc_bias == VDEV_BIAS_EXEMPT));
 
 		switch (vd->vdev_alloc_bias) {
 		case VDEV_BIAS_LOG:
@@ -1309,6 +1312,9 @@ vdev_metaslab_group_create(vdev_t *vd)
 			break;
 		case VDEV_BIAS_DEDUP:
 			mc = spa_dedup_class(spa);
+			break;
+		case VDEV_BIAS_EXEMPT:
+			mc = spa_exempt_class(spa);
 			break;
 		default:
 			mc = spa_normal_class(spa);
@@ -3023,13 +3029,15 @@ vdev_zap_allocation_data(vdev_t *vd, dmu_tx_t *tx)
 	string =
 	    (alloc_bias == VDEV_BIAS_LOG) ? VDEV_ALLOC_BIAS_LOG :
 	    (alloc_bias == VDEV_BIAS_SPECIAL) ? VDEV_ALLOC_BIAS_SPECIAL :
-	    (alloc_bias == VDEV_BIAS_DEDUP) ? VDEV_ALLOC_BIAS_DEDUP : NULL;
+	    (alloc_bias == VDEV_BIAS_DEDUP) ? VDEV_ALLOC_BIAS_DEDUP :
+	    (alloc_bias == VDEV_BIAS_EXEMPT) ? VDEV_ALLOC_BIAS_EXEMPT : NULL;
 
 	ASSERT(string != NULL);
 	VERIFY0(zap_add(mos, vd->vdev_top_zap, VDEV_TOP_ZAP_ALLOCATION_BIAS,
 	    1, strlen(string) + 1, string, tx));
 
-	if (alloc_bias == VDEV_BIAS_SPECIAL || alloc_bias == VDEV_BIAS_DEDUP) {
+	if (alloc_bias == VDEV_BIAS_SPECIAL || alloc_bias == VDEV_BIAS_DEDUP ||
+	    alloc_bias == VDEV_BIAS_EXEMPT) {
 		spa_activate_allocation_classes(spa, tx);
 	}
 }

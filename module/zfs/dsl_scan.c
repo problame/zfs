@@ -1251,6 +1251,7 @@ dsl_scan_should_clear(dsl_scan_t *scn)
 	alloc = metaslab_class_get_alloc(spa_normal_class(spa));
 	alloc += metaslab_class_get_alloc(spa_special_class(spa));
 	alloc += metaslab_class_get_alloc(spa_dedup_class(spa));
+	VERIFY0(metaslab_class_get_alloc(spa_exempt_class(spa)));
 
 	mlim_hard = MAX((physmem / zfs_scan_mem_lim_fact) * PAGESIZE,
 	    zfs_scan_mem_lim_min);

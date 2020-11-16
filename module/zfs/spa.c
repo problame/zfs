@@ -303,10 +303,12 @@ spa_prop_get_config(spa_t *spa, nvlist_t **nvp)
 		alloc = metaslab_class_get_alloc(mc);
 		alloc += metaslab_class_get_alloc(spa_special_class(spa));
 		alloc += metaslab_class_get_alloc(spa_dedup_class(spa));
+		VERIFY0(metaslab_class_get_alloc(spa_exempt_class(spa)));
 
 		size = metaslab_class_get_space(mc);
 		size += metaslab_class_get_space(spa_special_class(spa));
 		size += metaslab_class_get_space(spa_dedup_class(spa));
+		size += metaslab_class_get_space(spa_exempt_class(spa));
 
 		spa_prop_add_list(*nvp, ZPOOL_PROP_NAME, spa_name(spa), 0, src);
 		spa_prop_add_list(*nvp, ZPOOL_PROP_SIZE, NULL, size, src);
@@ -1198,6 +1200,8 @@ spa_activate(spa_t *spa, spa_mode_t mode)
 	spa->spa_log_class = metaslab_class_create(spa, zfs_metaslab_ops);
 	spa->spa_special_class = metaslab_class_create(spa, zfs_metaslab_ops);
 	spa->spa_dedup_class = metaslab_class_create(spa, zfs_metaslab_ops);
+	spa->spa_exempt_class =
+	    metaslab_class_create(spa, &zfs_metaslab_panic_ops);
 
 	/* Try to create a covering process */
 	mutex_enter(&spa->spa_proc_lock);
@@ -1352,6 +1356,9 @@ spa_deactivate(spa_t *spa)
 
 	metaslab_class_destroy(spa->spa_dedup_class);
 	spa->spa_dedup_class = NULL;
+
+	metaslab_class_destroy(spa->spa_exempt_class);
+	spa->spa_exempt_class = NULL;
 
 	/*
 	 * If this was part of an import or the open otherwise failed, we may
@@ -8033,12 +8040,14 @@ spa_async_thread(void *arg)
 		old_space = metaslab_class_get_space(spa_normal_class(spa));
 		old_space += metaslab_class_get_space(spa_special_class(spa));
 		old_space += metaslab_class_get_space(spa_dedup_class(spa));
+		old_space += metaslab_class_get_space(spa_exempt_class(spa));
 
 		spa_config_update(spa, SPA_CONFIG_UPDATE_POOL);
 
 		new_space = metaslab_class_get_space(spa_normal_class(spa));
 		new_space += metaslab_class_get_space(spa_special_class(spa));
 		new_space += metaslab_class_get_space(spa_dedup_class(spa));
+		new_space += metaslab_class_get_space(spa_exempt_class(spa));
 		mutex_exit(&spa_namespace_lock);
 
 		/*

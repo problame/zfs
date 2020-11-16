@@ -497,6 +497,9 @@ vdev_config_generate(spa_t *spa, vdev_t *vd, boolean_t getstats,
 			case VDEV_BIAS_DEDUP:
 				bias = VDEV_ALLOC_BIAS_DEDUP;
 				break;
+			case VDEV_BIAS_EXEMPT:
+				bias = VDEV_ALLOC_BIAS_EXEMPT;
+				break;
 			default:
 				ASSERT3U(vd->vdev_alloc_bias, ==,
 				    VDEV_BIAS_NONE);
